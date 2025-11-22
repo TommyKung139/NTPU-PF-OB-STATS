@@ -54,7 +54,7 @@ export default function PlayersPage() {
         setIsDialogOpen(true);
     };
 
-    const importLegacyStats = () => {
+    const importLegacyStats = async () => {
         const csvData = `Number,Name,PA,AB,AVG,OBP,OPS,SLG,H,1B,2B,3B,HR,RBI,BB,SO,SF,PA/BB,BABIP,BB%,OPS+,wOBA,isoP%
 ,胡宜誠,5,5,0.000,0.000,0.000,0.000,0,0,0,0,0,0,0,0,0,#DIV/0!,0.000,0.00%,-100.0,0.000,0.000
 ,鄔芳益,26,24,0.375,0.423,1.090,0.667,9,6,0,2,1,6,2,0,0,13.000,0.348,7.69%,180.7,0.454,0.292
@@ -98,28 +98,28 @@ export default function PlayersPage() {
         const { addPlayer, addGame, updateStats } = useStore.getState();
 
         // Create a legacy game bucket
-        const gameId = addGame({
+        const gameId = await addGame({
             opponent: 'Legacy Stats Import',
             date: new Date().toISOString().split('T')[0],
         });
 
-        rows.forEach(row => {
+        for (const row of rows) {
             const cols = row.split(',');
-            if (cols.length < 5 || cols[1] === 'TEAM') return;
+            if (cols.length < 5 || cols[1] === 'TEAM') continue;
 
             const number = cols[0].trim() || '?';
             const name = cols[1].trim();
 
-            if (!name) return;
+            if (!name) continue;
 
             // Add Player
-            addPlayer({ name, number });
+            await addPlayer({ name, number });
 
             // Look up the player we just added
             const player = useStore.getState().players.find(p => p.name === name && p.number === number);
 
             if (player) {
-                updateStats({
+                await updateStats({
                     playerId: player.id,
                     gameId,
                     pa: parseInt(cols[2]) || 0,
@@ -135,7 +135,7 @@ export default function PlayersPage() {
                     e: 0
                 });
             }
-        });
+        }
 
         alert('Stats imported successfully!');
         window.location.reload();
