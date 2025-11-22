@@ -13,12 +13,12 @@ interface SavantPercentileChartProps {
 
 export function SavantPercentileChart({ metrics }: SavantPercentileChartProps) {
     return (
-        <div className="w-full max-w-md bg-white rounded-lg shadow-sm border p-4">
+        <div className="w-full bg-white rounded-lg shadow-sm border p-4">
             <div className="flex justify-between items-center mb-4 border-b pb-2">
                 <h3 className="font-bold text-lg flex items-center gap-2">
                     <span className="text-slate-900">Batting</span>
                 </h3>
-                <div className="flex text-xs font-bold text-slate-400 gap-12">
+                <div className="flex text-xs font-bold text-slate-400 gap-4 md:gap-12">
                     <span>POOR</span>
                     <span>AVERAGE</span>
                     <span>GREAT</span>

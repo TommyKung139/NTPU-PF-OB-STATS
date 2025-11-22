@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { useStore, Player } from '@/lib/store';
+import { useStore, Player, PlayerStats, Game } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -18,17 +18,255 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
     DialogFooter,
+    DialogDescription,
 } from '@/components/ui/dialog';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Pencil, Trash2, Plus, User } from 'lucide-react';
+import { Pencil, Trash2, Plus, User, ChevronDown, ChevronUp, AlertTriangle, Upload, Image as ImageIcon } from 'lucide-react';
+import { SavantPercentileChart } from '@/components/SavantPercentileChart';
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+// --- Helper Functions ---
+const calculateAdvancedStats = (pStats: PlayerStats[]) => {
+    const pa = pStats.reduce((sum, s) => sum + (s.pa || 0), 0);
+    const ab = pStats.reduce((sum, s) => sum + (s.ab || 0), 0);
+    const h = pStats.reduce((sum, s) => sum + (s.h1 || 0) + (s.h2 || 0) + (s.h3 || 0) + (s.hr || 0), 0);
+    const h1 = pStats.reduce((sum, s) => sum + (s.h1 || 0), 0);
+    const h2 = pStats.reduce((sum, s) => sum + (s.h2 || 0), 0);
+    const h3 = pStats.reduce((sum, s) => sum + (s.h3 || 0), 0);
+    const hr = pStats.reduce((sum, s) => sum + (s.hr || 0), 0);
+    const bb = pStats.reduce((sum, s) => sum + (s.bb || 0), 0);
+    const so = pStats.reduce((sum, s) => sum + (s.so || 0), 0);
+    const sf = pStats.reduce((sum, s) => sum + (s.sf || 0), 0);
+    const tb = h1 + 2 * h2 + 3 * h3 + 4 * hr;
+
+    const avg = ab ? h / ab : 0;
+    const obp = (ab + bb + sf) ? (h + bb) / (ab + bb + sf) : 0;
+    const slg = ab ? tb / ab : 0;
+    const ops = obp + slg;
+    const iso = slg - avg;
+
+    // wOBA (Approximate weights)
+    const wobaNum = (0.69 * bb) + (0.89 * h1) + (1.27 * h2) + (1.62 * h3) + (2.10 * hr);
+    const wobaDenom = ab + bb + sf;
+    const woba = wobaDenom ? wobaNum / wobaDenom : 0;
+
+    return { pa, ab, h, hr, bb, so, avg, obp, slg, ops, iso, woba };
+};
+
+// --- Sub-component for Player Details ---
+function PlayerDetailsPanel({ player, stats, players, games }: { player: Player, stats: PlayerStats[], players: Player[], games: Game[] }) {
+    const [viewMode, setViewMode] = useState<'career' | 'last5'>('career');
+
+    // Filter Stats based on View Mode
+    let filteredStats = stats.filter(s => s.playerId === player.id);
+    let comparisonStats = stats; // For percentiles
+
+    if (viewMode === 'last5') {
+        // Get last 5 games excluding Legacy
+        const sortedGames = [...games]
+            .filter(g => g.opponent !== 'Legacy Stats Import')
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const last5GameIds = sortedGames.slice(0, 5).map(g => g.id);
+
+        filteredStats = filteredStats.filter(s => last5GameIds.includes(s.gameId));
+
+        // For percentiles, we should compare against everyone's Last 5 performance?
+        // Or just keep career percentiles? Usually percentiles are season/career based.
+        // But if I want to see how I did in last 5 games vs team in last 5 games, I should filter team stats too.
+        comparisonStats = stats.filter(s => last5GameIds.includes(s.gameId));
+    }
+
+    const metrics = calculateAdvancedStats(filteredStats);
+
+    // Team Baseline for OPS+ (based on current view)
+    const teamStats = calculateAdvancedStats(comparisonStats);
+    const teamObp = teamStats.obp || 0.320;
+    const teamSlg = teamStats.slg || 0.400;
+
+    const calculateOpsPlus = (obp: number, slg: number) => {
+        if (!teamObp || !teamSlg) return 100;
+        return 100 * ((obp / teamObp) + (slg / teamSlg) - 1);
+    };
+
+    const opsPlus = calculateOpsPlus(metrics.obp, metrics.slg);
+
+    // Percentiles
+    const allPlayersStats = players.map(p => {
+        const pStats = comparisonStats.filter(s => s.playerId === p.id);
+        return { id: p.id, ...calculateAdvancedStats(pStats) };
+    }).filter(p => p.pa > 0);
+
+    const getPercentile = (value: number, dataset: number[]) => {
+        if (dataset.length === 0) return 0;
+        const sorted = [...dataset].sort((a, b) => a - b);
+        const rank = sorted.filter(v => v < value).length;
+        const equal = sorted.filter(v => v === value).length;
+        return Math.round(((rank + 0.5 * equal) / sorted.length) * 100);
+    };
+
+    const chartMetrics = [
+        {
+            label: 'xwOBA',
+            value: metrics.woba,
+            percentile: getPercentile(metrics.woba, allPlayersStats.map(p => p.woba)),
+            format: (v: number) => v.toFixed(3).replace('0.', '.')
+        },
+        {
+            label: 'xBA',
+            value: metrics.avg,
+            percentile: getPercentile(metrics.avg, allPlayersStats.map(p => p.avg)),
+            format: (v: number) => v.toFixed(3).replace('0.', '.')
+        },
+        {
+            label: 'xSLG',
+            value: metrics.slg,
+            percentile: getPercentile(metrics.slg, allPlayersStats.map(p => p.slg)),
+            format: (v: number) => v.toFixed(3).replace('0.', '.')
+        },
+        {
+            label: 'OPS+',
+            value: opsPlus,
+            percentile: getPercentile(opsPlus, allPlayersStats.map(p => calculateOpsPlus(p.obp, p.slg))),
+            format: (v: number) => Math.round(v).toString()
+        },
+        {
+            label: 'BB %',
+            value: metrics.pa ? (metrics.bb / metrics.pa) * 100 : 0,
+            percentile: getPercentile(metrics.pa ? (metrics.bb / metrics.pa) : 0, allPlayersStats.map(p => p.pa ? (p.bb / p.pa) : 0)),
+            format: (v: number) => v.toFixed(1)
+        },
+        {
+            label: 'K %',
+            value: metrics.pa ? (metrics.so / metrics.pa) * 100 : 0,
+            percentile: 100 - getPercentile(metrics.pa ? (metrics.so / metrics.pa) : 0, allPlayersStats.map(p => p.pa ? (p.so / p.pa) : 0)),
+            format: (v: number) => v.toFixed(1)
+        },
+        {
+            label: 'ISO',
+            value: metrics.iso,
+            percentile: getPercentile(metrics.iso, allPlayersStats.map(p => p.iso)),
+            format: (v: number) => v.toFixed(3).replace('0.', '.')
+        },
+    ];
+
+    return (
+        <div className="p-4 bg-slate-50 rounded-lg mt-2 border border-slate-200">
+            <div className="grid lg:grid-cols-[200px_500px_1fr] gap-8">
+                {/* Image Column */}
+                <div className="flex flex-col items-center justify-center">
+                    <div className="relative w-40 h-56 bg-black rounded-lg overflow-hidden flex items-center justify-center shadow-lg">
+                        {player.image_url ? (
+                            <img src={player.image_url} alt={player.name} className="w-full h-full object-cover" />
+                        ) : (
+                            <div className="text-white text-center p-4">
+                                <p className="font-bold text-sm">目前沒有圖片</p>
+                                <p className="text-xs mt-1">可自行上傳</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Stats Column */}
+                <div>
+                    <div className="flex justify-between items-center mb-4">
+                        <h4 className="font-bold text-slate-700">Detailed Statistics</h4>
+                        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'career' | 'last5')}>
+                            <TabsList className="h-8">
+                                <TabsTrigger value="career" className="text-xs">Career</TabsTrigger>
+                                <TabsTrigger value="last5" className="text-xs">Last 5 Games</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                        <div className="flex justify-between border-b border-slate-200 py-2">
+                            <span className="text-slate-500">PA:</span>
+                            <span className="font-mono font-bold text-slate-900">{metrics.pa}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-200 py-2">
+                            <span className="text-slate-500">AB:</span>
+                            <span className="font-mono font-bold text-slate-900">{metrics.ab}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-200 py-2">
+                            <span className="text-slate-500">Hits:</span>
+                            <span className="font-mono font-bold text-slate-900">{metrics.h}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-200 py-2">
+                            <span className="text-slate-500">HR:</span>
+                            <span className="font-mono font-bold text-slate-900">{metrics.hr}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-200 py-2">
+                            <span className="text-slate-500">RBI:</span>
+                            <span className="font-mono font-bold text-slate-900">{filteredStats.reduce((sum, s) => sum + (s.rbi || 0), 0)}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-200 py-2">
+                            <span className="text-slate-500">BB:</span>
+                            <span className="font-mono font-bold text-slate-900">{metrics.bb}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-200 py-2">
+                            <span className="text-slate-500">SO:</span>
+                            <span className="font-mono font-bold text-slate-900">{metrics.so}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-200 py-2">
+                            <span className="text-slate-500">wOBA:</span>
+                            <span className="font-mono font-bold text-slate-900">{metrics.woba.toFixed(3).replace('0.', '.')}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Chart Column */}
+                <div>
+                    <h4 className="font-bold text-slate-700 mb-2">Percentile Rankings (vs Team)</h4>
+                    <SavantPercentileChart metrics={chartMetrics} />
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function PlayersPage() {
-    const { players, addPlayer, updatePlayer, deletePlayer } = useStore();
+    const { players, stats, games, addPlayer, updatePlayer, deletePlayer, clearAllData } = useStore();
+
+    // Player Edit/Add State
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
-    const [formData, setFormData] = useState({ name: '', number: '' });
+    const [formData, setFormData] = useState({ name: '', number: '', image_url: '' });
+
+    // Password & Action State
+    const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+    const [password, setPassword] = useState('');
+    const [pendingAction, setPendingAction] = useState<'import' | 'delete' | null>(null);
+    const [passwordError, setPasswordError] = useState('');
+    const [isDeleteWarningOpen, setIsDeleteWarningOpen] = useState(false);
+
+    // Table Expansion State
+    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+    // Image Upload Ref (for Edit Dialog)
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const toggleRow = (playerId: string) => {
+        const newExpanded = new Set(expandedRows);
+        if (newExpanded.has(playerId)) {
+            newExpanded.delete(playerId);
+        } else {
+            newExpanded.add(playerId);
+        }
+        setExpandedRows(newExpanded);
+    };
+
+    // --- Action Handlers ---
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -39,22 +277,78 @@ export default function PlayersPage() {
         }
         setIsDialogOpen(false);
         setEditingPlayer(null);
-        setFormData({ name: '', number: '' });
+        setFormData({ name: '', number: '', image_url: '' });
     };
 
     const openEdit = (player: Player) => {
         setEditingPlayer(player);
-        setFormData({ name: player.name, number: player.number });
+        setFormData({ name: player.name, number: player.number, image_url: player.image_url || '' });
         setIsDialogOpen(true);
     };
 
     const openAdd = () => {
         setEditingPlayer(null);
-        setFormData({ name: '', number: '' });
+        setFormData({ name: '', number: '', image_url: '' });
         setIsDialogOpen(true);
     };
 
-    const importLegacyStats = async () => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result as string;
+                setFormData(prev => ({ ...prev, image_url: base64String }));
+            };
+            reader.readAsDataURL(file);
+        }
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const removeImage = () => {
+        setFormData(prev => ({ ...prev, image_url: '' }));
+    };
+
+    const initiateImport = () => {
+        setPendingAction('import');
+        setPassword('');
+        setPasswordError('');
+        setIsPasswordOpen(true);
+    };
+
+    const initiateDelete = () => {
+        setIsDeleteWarningOpen(true);
+    };
+
+    const confirmDeleteWarning = () => {
+        setIsDeleteWarningOpen(false);
+        setPendingAction('delete');
+        setPassword('');
+        setPasswordError('');
+        setIsPasswordOpen(true);
+    };
+
+    const handlePasswordSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (password === 'NTPUPFOB') {
+            setIsPasswordOpen(false);
+            if (pendingAction === 'import') {
+                await executeImport();
+            } else if (pendingAction === 'delete') {
+                await executeDelete();
+            }
+            setPendingAction(null);
+        } else {
+            setPasswordError('確定要刪掉嗎？要的話，提示：北大財政OB英文');
+        }
+    };
+
+    const executeDelete = async () => {
+        await clearAllData();
+        alert('All data has been cleared.');
+    };
+
+    const executeImport = async () => {
         const csvData = `Number,Name,PA,AB,AVG,OBP,OPS,SLG,H,1B,2B,3B,HR,RBI,BB,SO,SF,PA/BB,BABIP,BB%,OPS+,wOBA,isoP%
 ,胡宜誠,5,5,0.000,0.000,0.000,0.000,0,0,0,0,0,0,0,0,0,#DIV/0!,0.000,0.00%,-100.0,0.000,0.000
 ,鄔芳益,26,24,0.375,0.423,1.090,0.667,9,6,0,2,1,6,2,0,0,13.000,0.348,7.69%,180.7,0.454,0.292
@@ -112,15 +406,22 @@ export default function PlayersPage() {
 
             if (!name) continue;
 
-            // Add Player
-            await addPlayer({ name, number });
+            // Check if player already exists
+            const existingPlayer = useStore.getState().players.find(p => p.name === name && p.number === number);
 
-            // Look up the player we just added
-            const player = useStore.getState().players.find(p => p.name === name && p.number === number);
+            let playerId = existingPlayer?.id;
 
-            if (player) {
+            if (!existingPlayer) {
+                // Add Player if not exists
+                await addPlayer({ name, number });
+                // Get the new player ID
+                const newPlayer = useStore.getState().players.find(p => p.name === name && p.number === number);
+                playerId = newPlayer?.id;
+            }
+
+            if (playerId) {
                 await updateStats({
-                    playerId: player.id,
+                    playerId: playerId,
                     gameId,
                     pa: parseInt(cols[2]) || 0,
                     ab: parseInt(cols[3]) || 0,
@@ -148,8 +449,11 @@ export default function PlayersPage() {
                     <h1 className="text-3xl font-bold text-slate-900">Team Roster</h1>
                     <p className="text-slate-500">Manage your players and jersey numbers</p>
                 </div>
-                <div className="space-x-2">
-                    <Button onClick={importLegacyStats} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
+                <div className="space-x-2 flex">
+                    <Button onClick={initiateDelete} variant="destructive" className="bg-red-600 hover:bg-red-700">
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete Data
+                    </Button>
+                    <Button onClick={initiateImport} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
                         Import Legacy Stats
                     </Button>
                     <Button onClick={openAdd} className="bg-blue-600 hover:bg-blue-700">
@@ -172,47 +476,82 @@ export default function PlayersPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-[100px]">Number</TableHead>
+                                    <TableHead className="w-[50px]"></TableHead>
+                                    <TableHead className="w-[80px]">Number</TableHead>
                                     <TableHead>Name</TableHead>
+                                    <TableHead className="text-right hidden md:table-cell">AVG</TableHead>
+                                    <TableHead className="text-right hidden md:table-cell">OBP</TableHead>
+                                    <TableHead className="text-right hidden md:table-cell">SLG</TableHead>
+                                    <TableHead className="text-right hidden md:table-cell">OPS</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {players.map((player) => (
-                                    <TableRow key={player.id}>
-                                        <TableCell className="font-mono font-bold text-lg text-slate-700">
-                                            #{player.number}
-                                        </TableCell>
-                                        <TableCell className="font-medium text-lg">
-                                            <Link href={`/players/${player.id}`} className="hover:underline hover:text-blue-600">
-                                                {player.name}
-                                            </Link>
-                                        </TableCell>
-                                        <TableCell className="text-right space-x-2">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => openEdit(player)}
-                                            >
-                                                <Pencil className="h-4 w-4 text-slate-500" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => deletePlayer(player.id)}
-                                                className="hover:text-red-600"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                {players.map((player) => {
+                                    const pStats = stats.filter(s => s.playerId === player.id);
+                                    const metrics = calculateAdvancedStats(pStats);
+                                    const isExpanded = expandedRows.has(player.id);
+
+                                    return (
+                                        <>
+                                            <TableRow key={player.id} className={isExpanded ? 'bg-slate-50 border-b-0' : ''}>
+                                                <TableCell>
+                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => toggleRow(player.id)}>
+                                                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                    </Button>
+                                                </TableCell>
+                                                <TableCell className="font-mono font-bold text-lg text-slate-700">
+                                                    #{player.number}
+                                                </TableCell>
+                                                <TableCell className="font-medium text-lg">
+                                                    <span className="text-slate-900">
+                                                        {player.name}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="text-right font-mono hidden md:table-cell">{metrics.avg.toFixed(3).replace('0.', '.')}</TableCell>
+                                                <TableCell className="text-right font-mono hidden md:table-cell">{metrics.obp.toFixed(3).replace('0.', '.')}</TableCell>
+                                                <TableCell className="text-right font-mono hidden md:table-cell">{metrics.slg.toFixed(3).replace('0.', '.')}</TableCell>
+                                                <TableCell className="text-right font-mono font-bold text-blue-700 hidden md:table-cell">{metrics.ops.toFixed(3)}</TableCell>
+                                                <TableCell className="text-right space-x-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => openEdit(player)}
+                                                    >
+                                                        <Pencil className="h-4 w-4 text-slate-500" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => deletePlayer(player.id)}
+                                                        className="hover:text-red-600"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                            {isExpanded && (
+                                                <TableRow className="bg-slate-50 hover:bg-slate-50">
+                                                    <TableCell colSpan={8} className="p-4 pt-0">
+                                                        <PlayerDetailsPanel
+                                                            player={player}
+                                                            stats={stats}
+                                                            players={players}
+                                                            games={games}
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </>
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     )}
                 </CardContent>
             </Card>
 
+            {/* Edit/Add Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
@@ -249,6 +588,51 @@ export default function PlayersPage() {
                                 required
                             />
                         </div>
+
+                        {/* Image Upload in Dialog */}
+                        <div className="grid gap-2">
+                            <label className="text-sm font-medium">
+                                Player Photo
+                            </label>
+                            <div className="flex items-center gap-4">
+                                <div className="relative w-20 h-28 bg-black rounded overflow-hidden flex items-center justify-center border border-slate-200">
+                                    {formData.image_url ? (
+                                        <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-xs text-white text-center">No Image</span>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => fileInputRef.current?.click()}
+                                    >
+                                        <Upload className="h-4 w-4 mr-2" /> Upload Photo
+                                    </Button>
+                                    {formData.image_url && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-red-600 hover:text-red-700"
+                                            onClick={removeImage}
+                                        >
+                                            <Trash2 className="h-4 w-4 mr-2" /> Remove
+                                        </Button>
+                                    )}
+                                </div>
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    accept="image/*"
+                                    onChange={handleFileChange}
+                                />
+                            </div>
+                        </div>
+
                         <DialogFooter>
                             <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
                                 {editingPlayer ? 'Save Changes' : 'Add Player'}
@@ -257,6 +641,59 @@ export default function PlayersPage() {
                     </form>
                 </DialogContent>
             </Dialog>
+
+            {/* Password Dialog */}
+            <Dialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Authentication Required</DialogTitle>
+                        <DialogDescription>
+                            Please enter the administrator password to continue.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                        <div className="grid gap-2">
+                            <Input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Enter Password"
+                                autoFocus
+                            />
+                            {passwordError && (
+                                <p className="text-sm text-red-600 font-medium">
+                                    {passwordError}
+                                </p>
+                            )}
+                        </div>
+                        <DialogFooter>
+                            <Button type="submit">Confirm</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Warning Alert */}
+            <AlertDialog open={isDeleteWarningOpen} onOpenChange={setIsDeleteWarningOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center text-red-600">
+                            <AlertTriangle className="mr-2 h-5 w-5" />
+                            Warning: Irreversible Action
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action will permanently delete ALL players, games, and statistics. This cannot be undone.
+                            Are you sure you want to proceed?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDeleteWarning} className="bg-red-600 hover:bg-red-700">
+                            Yes, I understand
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

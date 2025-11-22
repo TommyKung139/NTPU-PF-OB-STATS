@@ -34,21 +34,24 @@ export default function Dashboard() {
   const teamMetrics = calculateMetrics(stats);
 
   // Hot/Cold Logic (Last 5 games)
-  // 1. Get last 5 game IDs
-  const sortedGames = [...games].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // 1. Get last 5 game IDs (excluding Legacy Import)
+  const sortedGames = [...games]
+    .filter(g => g.opponent !== 'Legacy Stats Import')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const last5GameIds = sortedGames.slice(0, 5).map(g => g.id);
 
   // 2. Calculate stats for each player in these games
   const playerPerformances = players.map(player => {
     const pStats = stats.filter(s => s.playerId === player.id && last5GameIds.includes(s.gameId));
     const metrics = calculateMetrics(pStats);
+    const pa = pStats.reduce((sum, s) => sum + (s.pa || 0), 0);
     return {
       ...player,
       avg: parseFloat(metrics.avg),
       ops: parseFloat(metrics.ops),
-      ab: pStats.reduce((sum, s) => sum + (s.ab || 0), 0)
+      pa
     };
-  }).filter(p => p.ab > 0); // Only players with ABs
+  }).filter(p => p.pa > 0); // Only players with PAs in the last 5 games
 
   const hotPlayers = [...playerPerformances].sort((a, b) => b.ops - a.ops).slice(0, 3);
   const coldPlayers = [...playerPerformances].sort((a, b) => a.ops - b.ops).slice(0, 3);

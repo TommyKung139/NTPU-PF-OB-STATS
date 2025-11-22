@@ -5,6 +5,7 @@ export interface Player {
     id: string;
     name: string;
     number: string;
+    image_url?: string;
 }
 
 export interface Game {
@@ -41,6 +42,7 @@ interface AppState {
     addPlayer: (player: Omit<Player, 'id'>) => Promise<void>;
     updatePlayer: (id: string, data: Partial<Player>) => Promise<void>;
     deletePlayer: (id: string) => Promise<void>;
+    clearAllData: () => Promise<void>;
 
     addGame: (game: Omit<Game, 'id' | 'isFinished'>) => Promise<string>;
     finishGame: (id: string) => Promise<void>;
@@ -115,6 +117,23 @@ export const useStore = create<AppState>((set, get) => ({
         set((state) => ({
             players: state.players.filter((p) => p.id !== id)
         }));
+    },
+
+    clearAllData: async () => {
+        // Delete in order of dependencies: Stats -> Games -> Players
+        // Actually, if we just delete players and games, stats might cascade or we should delete them explicitly.
+        // Let's be safe and delete everything.
+
+        const { error: sErr } = await supabase.from('stats').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+        if (sErr) console.error('Error clearing stats:', sErr);
+
+        const { error: gErr } = await supabase.from('games').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (gErr) console.error('Error clearing games:', gErr);
+
+        const { error: pErr } = await supabase.from('players').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (pErr) console.error('Error clearing players:', pErr);
+
+        set({ players: [], games: [], stats: [] });
     },
 
     addGame: async (game) => {
