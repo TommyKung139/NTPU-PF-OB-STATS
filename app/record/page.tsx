@@ -56,18 +56,18 @@ export default function RecordGamePage() {
         return { h, avg };
     };
 
-    const handleSaveGame = () => {
+    const handleSaveGame = async () => {
         if (!gameData.opponent) return;
 
-        const gameId = addGame({
+        const gameId = await addGame({
             opponent: gameData.opponent,
             date: gameData.date,
         });
 
-        selectedPlayerIds.forEach(playerId => {
+        for (const playerId of selectedPlayerIds) {
             const playerStats = stats[playerId];
             if (playerStats) {
-                updateStats({
+                await updateStats({
                     playerId,
                     gameId,
                     pa: playerStats.pa || 0,
@@ -83,7 +83,7 @@ export default function RecordGamePage() {
                     e: playerStats.e || 0,
                 });
             }
-        });
+        }
 
         router.push('/');
     };
@@ -142,8 +142,8 @@ export default function RecordGamePage() {
                                 <div
                                     key={player.id}
                                     className={`flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedPlayerIds.includes(player.id)
-                                            ? 'bg-blue-50 border-blue-200'
-                                            : 'hover:bg-slate-50'
+                                        ? 'bg-blue-50 border-blue-200'
+                                        : 'hover:bg-slate-50'
                                         }`}
                                     onClick={() => handlePlayerToggle(player.id)}
                                 >
