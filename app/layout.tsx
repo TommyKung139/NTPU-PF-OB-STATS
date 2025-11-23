@@ -10,6 +10,13 @@ export const metadata: Metadata = {
   description: "Advanced team analytics and lineup optimizer",
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 import { StoreInitializer } from '@/components/StoreInitializer';
 
 export default function RootLayout({

@@ -444,19 +444,19 @@ export default function PlayersPage() {
 
     return (
         <div className="container mx-auto py-8 px-4">
-            <div className="flex justify-between items-center mb-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900">Team Roster</h1>
                     <p className="text-slate-500">Manage your players and jersey numbers</p>
                 </div>
-                <div className="space-x-2 flex">
-                    <Button onClick={initiateDelete} variant="destructive" className="bg-red-600 hover:bg-red-700">
+                <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                    <Button onClick={initiateDelete} variant="destructive" className="bg-red-600 hover:bg-red-700 w-full md:w-auto">
                         <Trash2 className="mr-2 h-4 w-4" /> Delete Data
                     </Button>
-                    <Button onClick={initiateImport} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
+                    <Button onClick={initiateImport} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 w-full md:w-auto">
                         Import Legacy Stats
                     </Button>
-                    <Button onClick={openAdd} className="bg-blue-600 hover:bg-blue-700">
+                    <Button onClick={openAdd} className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto">
                         <Plus className="mr-2 h-4 w-4" /> Add Player
                     </Button>
                 </div>

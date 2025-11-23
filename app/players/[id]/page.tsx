@@ -146,17 +146,13 @@ export default function PlayerPage({ params }: PageProps) {
             </Link>
 
             {/* Player Header */}
-            <div className="bg-white border-b mb-8 pb-6 flex flex-col md:flex-row items-center gap-8">
-                <div className="h-32 w-32 bg-slate-100 rounded-full flex items-center justify-center border-4 border-white shadow-lg">
-                    <UserCircle className="h-24 w-24 text-slate-300" />
-                </div>
-                <div className="text-center md:text-left">
-                    <h1 className="text-5xl font-bold text-slate-900 mb-2">{player.name}</h1>
-                    <div className="text-xl text-slate-600 flex items-center justify-center md:justify-start gap-3">
-                        <span className="font-mono font-bold bg-slate-100 px-2 py-1 rounded">#{player.number}</span>
-                        <span>|</span>
-                        <span>Team Player</span>
-                    </div>
+            <div className="flex justify-center mb-8">
+                <div className="relative w-full max-w-[300px] md:max-w-md shadow-2xl rounded-xl overflow-hidden">
+                    <img
+                        src="/player-card.png"
+                        alt={player.name}
+                        className="w-full h-auto object-contain block"
+                    />
                 </div>
             </div>
 
