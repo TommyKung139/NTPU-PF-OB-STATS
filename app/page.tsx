@@ -3,11 +3,11 @@
 import { useStore, PlayerStats } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Activity } from 'lucide-react';
+import { ArrowRight, TrendingUp, TrendingDown, Activity, Edit, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function Dashboard() {
-  const { players, games, stats } = useStore();
+  const { players, games, stats, deleteGame } = useStore();
 
   // Helper to calculate stats
   const calculateMetrics = (playerStats: PlayerStats[]) => {
@@ -179,12 +179,30 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-2">
               {sortedGames.map(game => (
-                <div key={game.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                <div key={game.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg group">
                   <div>
                     <div className="font-bold text-slate-900">vs {game.opponent}</div>
                     <div className="text-xs text-slate-500">{game.date}</div>
                   </div>
-                  {/* Could add W/L or Score here if we tracked it */}
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Link href={`/record?gameId=${game.id}`}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-blue-600">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-500 hover:text-red-600"
+                      onClick={() => {
+                        if (confirm('Are you sure you want to delete this game record? This action cannot be undone.')) {
+                          deleteGame(game.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

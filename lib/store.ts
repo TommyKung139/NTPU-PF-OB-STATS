@@ -37,6 +37,8 @@ interface AppState {
     stats: PlayerStats[];
     isLoading: boolean;
 
+    error: string | null;
+
     // Actions
     fetchData: () => Promise<void>;
     addPlayer: (player: Omit<Player, 'id'>) => Promise<void>;
@@ -45,6 +47,8 @@ interface AppState {
     clearAllData: () => Promise<void>;
 
     addGame: (game: Omit<Game, 'id' | 'isFinished'>) => Promise<string>;
+    updateGame: (id: string, game: Partial<Game>) => Promise<void>;
+    deleteGame: (id: string) => Promise<void>;
     finishGame: (id: string) => Promise<void>;
 
     updateStats: (stats: PlayerStats) => Promise<void>;
@@ -57,35 +61,47 @@ export const useStore = create<AppState>((set, get) => ({
     games: [],
     stats: [],
     isLoading: false,
+    error: null,
 
     fetchData: async () => {
-        set({ isLoading: true });
+        set({ isLoading: true, error: null });
 
-        const [pRes, gRes, sRes] = await Promise.all([
-            supabase.from('players').select('*'),
-            supabase.from('games').select('*'),
-            supabase.from('stats').select('*')
-        ]);
+        try {
+            const fetchPromise = Promise.all([
+                supabase.from('players').select('*'),
+                supabase.from('games').select('*'),
+                supabase.from('stats').select('*')
+            ]);
 
-        if (pRes.error) console.error(pRes.error);
-        if (gRes.error) console.error(gRes.error);
-        if (sRes.error) console.error(sRes.error);
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Timeout')), 300000) // 5 minutes
+            );
 
-        const players = pRes.data || [];
-        const games = (gRes.data || []).map((g: any) => ({
-            id: g.id,
-            opponent: g.opponent,
-            date: g.date,
-            isFinished: g.is_finished
-        }));
-        const stats = (sRes.data || []).map((s: any) => ({
-            playerId: s.player_id,
-            gameId: s.game_id,
-            pa: s.pa, ab: s.ab, h1: s.h1, h2: s.h2, h3: s.h3, hr: s.hr,
-            rbi: s.rbi, bb: s.bb, so: s.so, sf: s.sf, e: s.e
-        }));
+            const [pRes, gRes, sRes] = await Promise.race([fetchPromise, timeoutPromise]) as any;
 
-        set({ players, games, stats, isLoading: false });
+            if (pRes.error) throw pRes.error;
+            if (gRes.error) throw gRes.error;
+            if (sRes.error) throw sRes.error;
+
+            const players = pRes.data || [];
+            const games = (gRes.data || []).map((g: any) => ({
+                id: g.id,
+                opponent: g.opponent,
+                date: g.date,
+                isFinished: g.is_finished
+            }));
+            const stats = (sRes.data || []).map((s: any) => ({
+                playerId: s.player_id,
+                gameId: s.game_id,
+                pa: s.pa, ab: s.ab, h1: s.h1, h2: s.h2, h3: s.h3, hr: s.hr,
+                rbi: s.rbi, bb: s.bb, so: s.so, sf: s.sf, e: s.e
+            }));
+
+            set({ players, games, stats, isLoading: false });
+        } catch (err: any) {
+            console.error('Error fetching data:', err);
+            set({ isLoading: false, error: '紀錄組掛機惹，請稍後再試' });
+        }
     },
 
     addPlayer: async (player) => {
@@ -157,6 +173,42 @@ export const useStore = create<AppState>((set, get) => ({
 
         set((state) => ({ games: [...state.games, newGame] }));
         return newGame.id;
+    },
+
+    updateGame: async (id, game) => {
+        const updates: any = {};
+        if (game.opponent !== undefined) updates.opponent = game.opponent;
+        if (game.date !== undefined) updates.date = game.date;
+        if (game.isFinished !== undefined) updates.is_finished = game.isFinished;
+
+        const { error } = await supabase.from('games').update(updates).eq('id', id);
+
+        if (error) {
+            console.error(error);
+            return;
+        }
+
+        set((state) => ({
+            games: state.games.map((g) => g.id === id ? { ...g, ...game } : g)
+        }));
+    },
+
+    deleteGame: async (id) => {
+        // Delete stats first
+        const { error: sErr } = await supabase.from('stats').delete().eq('game_id', id);
+        if (sErr) console.error('Error deleting game stats:', sErr);
+
+        // Delete game
+        const { error: gErr } = await supabase.from('games').delete().eq('id', id);
+        if (gErr) {
+            console.error('Error deleting game:', gErr);
+            return;
+        }
+
+        set((state) => ({
+            games: state.games.filter((g) => g.id !== id),
+            stats: state.stats.filter((s) => s.gameId !== id)
+        }));
     },
 
     finishGame: async (id) => {
