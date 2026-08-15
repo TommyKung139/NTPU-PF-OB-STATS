@@ -34,7 +34,9 @@ let listenerStarted = false;
 export const useAuthStore = create<AuthState>((set, get) => {
     // Start the Firebase auth listener exactly once, on first store access.
     // (Safe to do here since lib/firebase.ts + this module only run client-side.)
-    if (!listenerStarted && typeof window !== 'undefined') {
+    // `auth` is undefined when NEXT_PUBLIC_FIREBASE_* env vars aren't set
+    // (see lib/firebase.ts) — skip subscribing rather than throwing.
+    if (!listenerStarted && typeof window !== 'undefined' && auth) {
         listenerStarted = true;
         onAuthStateChanged(auth, (user) => {
             set({ user, initializing: false });

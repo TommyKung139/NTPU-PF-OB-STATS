@@ -116,8 +116,20 @@ npm run dev
 Verify players/games/stats load correctly, then `npm run build` before
 deploying.
 
-If you deploy on Vercel (or similar), add the same six env vars in the
-project's environment settings.
+If you deploy on Vercel (or similar), **add the same six env vars in the
+project's environment settings before deploying** (Vercel → your project →
+Settings → Environment Variables → add for Production, Preview, and
+Development). `.env.local` is gitignored on purpose and never reaches
+Vercel on its own — skipping this step is the single most common way to
+break the deploy.
+
+> **Seeing `FirebaseError: auth/invalid-api-key` during `next build` /
+> prerendering (e.g. on `/_not-found`)?** That's this exact issue — the
+> build has no Firebase config because the env vars aren't set on the
+> deploy target yet. Add them above and redeploy. (`lib/firebase.ts` also
+> guards against this: with no config, it now logs a warning and skips
+> Firebase initialization instead of crashing the whole build — but the
+> app obviously can't talk to Firestore until the real values are set.)
 
 ## 6. Clean up
 
