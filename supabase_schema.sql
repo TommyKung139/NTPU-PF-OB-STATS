@@ -1,3 +1,9 @@
+-- LEGACY: this schema described the Supabase (Postgres) database that the
+-- app used before migrating to Firestore (see firestore.rules and
+-- MIGRATION_GUIDE.md). Kept here for reference / rollback only — the app
+-- no longer reads or writes this database. Safe to delete once the
+-- migration has been verified.
+
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore, Player, PlayerStats } from '@/lib/store';
+import { useAuthStore } from '@/lib/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,6 +16,7 @@ function RecordGameContent() {
     const searchParams = useSearchParams();
     const gameId = searchParams.get('gameId');
     const { players, games, stats: allStats, addGame, updateGame, updateStats } = useStore();
+    const requireAuth = useAuthStore((s) => s.requireAuth);
 
     const [step, setStep] = useState(1);
     const [gameData, setGameData] = useState({
@@ -87,6 +89,7 @@ function RecordGameContent() {
 
     const handleSaveGame = async () => {
         if (!gameData.opponent || isSaving) return;
+        if (!requireAuth()) return; // opens sign-in dialog if not signed in
 
         setIsSaving(true);
 

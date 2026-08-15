@@ -1,5 +1,19 @@
 import { create } from 'zustand';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import {
+    collection,
+    doc,
+    getDocs,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    query,
+    where,
+    limit,
+    writeBatch,
+    DocumentData,
+    QueryDocumentSnapshot,
+} from 'firebase/firestore';
 
 export interface Player {
     id: string;
@@ -56,6 +70,22 @@ interface AppState {
     getPlayerStats: (playerId: string) => PlayerStats[];
 }
 
+// Firestore collection names
+const PLAYERS_COL = 'players';
+const GAMES_COL = 'games';
+const STATS_COL = 'stats';
+
+// Firestore batches are capped at 500 writes; chunk conservatively.
+async function batchDeleteDocs(docs: QueryDocumentSnapshot<DocumentData>[], colName: string) {
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+        const chunk = docs.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((d) => batch.delete(doc(db, colName, d.id)));
+        await batch.commit();
+    }
+}
+
 export const useStore = create<AppState>((set, get) => ({
     players: [],
     games: [],
@@ -68,34 +98,42 @@ export const useStore = create<AppState>((set, get) => ({
 
         try {
             const fetchPromise = Promise.all([
-                supabase.from('players').select('*'),
-                supabase.from('games').select('*'),
-                supabase.from('stats').select('*')
+                getDocs(collection(db, PLAYERS_COL)),
+                getDocs(collection(db, GAMES_COL)),
+                getDocs(collection(db, STATS_COL)),
             ]);
 
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Timeout')), 300000) // 5 minutes
             );
 
-            const [pRes, gRes, sRes] = await Promise.race([fetchPromise, timeoutPromise]) as any;
+            const [pSnap, gSnap, sSnap] = await Promise.race([fetchPromise, timeoutPromise]) as [
+                Awaited<ReturnType<typeof getDocs>>,
+                Awaited<ReturnType<typeof getDocs>>,
+                Awaited<ReturnType<typeof getDocs>>
+            ];
 
-            if (pRes.error) throw pRes.error;
-            if (gRes.error) throw gRes.error;
-            if (sRes.error) throw sRes.error;
+            const players: Player[] = pSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Player, 'id'>) }));
 
-            const players = pRes.data || [];
-            const games = (gRes.data || []).map((g: any) => ({
-                id: g.id,
-                opponent: g.opponent,
-                date: g.date,
-                isFinished: g.is_finished
-            }));
-            const stats = (sRes.data || []).map((s: any) => ({
-                playerId: s.player_id,
-                gameId: s.game_id,
-                pa: s.pa, ab: s.ab, h1: s.h1, h2: s.h2, h3: s.h3, hr: s.hr,
-                rbi: s.rbi, bb: s.bb, so: s.so, sf: s.sf, e: s.e
-            }));
+            const games: Game[] = gSnap.docs.map((d) => {
+                const data = d.data() as any;
+                return {
+                    id: d.id,
+                    opponent: data.opponent,
+                    date: data.date,
+                    isFinished: !!data.isFinished,
+                };
+            });
+
+            const stats: PlayerStats[] = sSnap.docs.map((d) => {
+                const s = d.data() as any;
+                return {
+                    playerId: s.playerId,
+                    gameId: s.gameId,
+                    pa: s.pa, ab: s.ab, h1: s.h1, h2: s.h2, h3: s.h3, hr: s.hr,
+                    rbi: s.rbi, bb: s.bb, so: s.so, sf: s.sf, e: s.e
+                };
+            });
 
             set({ players, games, stats, isLoading: false });
         } catch (err: any) {
@@ -105,17 +143,18 @@ export const useStore = create<AppState>((set, get) => ({
     },
 
     addPlayer: async (player) => {
-        const { data, error } = await supabase.from('players').insert([player]).select().single();
-        if (error) {
+        try {
+            const ref = await addDoc(collection(db, PLAYERS_COL), player);
+            set((state) => ({ players: [...state.players, { id: ref.id, ...player }] }));
+        } catch (error) {
             console.error(error);
-            return;
         }
-        set((state) => ({ players: [...state.players, data] }));
     },
 
     updatePlayer: async (id, updateData) => {
-        const { error } = await supabase.from('players').update(updateData).eq('id', id);
-        if (error) {
+        try {
+            await updateDoc(doc(db, PLAYERS_COL, id), updateData as { [x: string]: any });
+        } catch (error) {
             console.error(error);
             return;
         }
@@ -125,8 +164,9 @@ export const useStore = create<AppState>((set, get) => ({
     },
 
     deletePlayer: async (id) => {
-        const { error } = await supabase.from('players').delete().eq('id', id);
-        if (error) {
+        try {
+            await deleteDoc(doc(db, PLAYERS_COL, id));
+        } catch (error) {
             console.error(error);
             return;
         }
@@ -137,53 +177,57 @@ export const useStore = create<AppState>((set, get) => ({
 
     clearAllData: async () => {
         // Delete in order of dependencies: Stats -> Games -> Players
-        // Actually, if we just delete players and games, stats might cascade or we should delete them explicitly.
-        // Let's be safe and delete everything.
+        try {
+            const sSnap = await getDocs(collection(db, STATS_COL));
+            await batchDeleteDocs(sSnap.docs, STATS_COL);
+        } catch (error) {
+            console.error('Error clearing stats:', error);
+        }
 
-        const { error: sErr } = await supabase.from('stats').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
-        if (sErr) console.error('Error clearing stats:', sErr);
+        try {
+            const gSnap = await getDocs(collection(db, GAMES_COL));
+            await batchDeleteDocs(gSnap.docs, GAMES_COL);
+        } catch (error) {
+            console.error('Error clearing games:', error);
+        }
 
-        const { error: gErr } = await supabase.from('games').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        if (gErr) console.error('Error clearing games:', gErr);
-
-        const { error: pErr } = await supabase.from('players').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        if (pErr) console.error('Error clearing players:', pErr);
+        try {
+            const pSnap = await getDocs(collection(db, PLAYERS_COL));
+            await batchDeleteDocs(pSnap.docs, PLAYERS_COL);
+        } catch (error) {
+            console.error('Error clearing players:', error);
+        }
 
         set({ players: [], games: [], stats: [] });
     },
 
     addGame: async (game) => {
-        const { data, error } = await supabase.from('games').insert([{
+        const payload = {
             opponent: game.opponent,
             date: game.date,
-            is_finished: false
-        }]).select().single();
+            isFinished: false,
+        };
 
-        if (error || !data) {
+        try {
+            const ref = await addDoc(collection(db, GAMES_COL), payload);
+            const newGame: Game = { id: ref.id, ...payload };
+            set((state) => ({ games: [...state.games, newGame] }));
+            return newGame.id;
+        } catch (error) {
             console.error(error);
             return '';
         }
-
-        const newGame: Game = {
-            id: data.id,
-            opponent: data.opponent,
-            date: data.date,
-            isFinished: data.is_finished
-        };
-
-        set((state) => ({ games: [...state.games, newGame] }));
-        return newGame.id;
     },
 
     updateGame: async (id, game) => {
         const updates: any = {};
         if (game.opponent !== undefined) updates.opponent = game.opponent;
         if (game.date !== undefined) updates.date = game.date;
-        if (game.isFinished !== undefined) updates.is_finished = game.isFinished;
+        if (game.isFinished !== undefined) updates.isFinished = game.isFinished;
 
-        const { error } = await supabase.from('games').update(updates).eq('id', id);
-
-        if (error) {
+        try {
+            await updateDoc(doc(db, GAMES_COL, id), updates);
+        } catch (error) {
             console.error(error);
             return;
         }
@@ -195,13 +239,18 @@ export const useStore = create<AppState>((set, get) => ({
 
     deleteGame: async (id) => {
         // Delete stats first
-        const { error: sErr } = await supabase.from('stats').delete().eq('game_id', id);
-        if (sErr) console.error('Error deleting game stats:', sErr);
+        try {
+            const sSnap = await getDocs(query(collection(db, STATS_COL), where('gameId', '==', id)));
+            await batchDeleteDocs(sSnap.docs, STATS_COL);
+        } catch (error) {
+            console.error('Error deleting game stats:', error);
+        }
 
         // Delete game
-        const { error: gErr } = await supabase.from('games').delete().eq('id', id);
-        if (gErr) {
-            console.error('Error deleting game:', gErr);
+        try {
+            await deleteDoc(doc(db, GAMES_COL, id));
+        } catch (error) {
+            console.error('Error deleting game:', error);
             return;
         }
 
@@ -212,8 +261,9 @@ export const useStore = create<AppState>((set, get) => ({
     },
 
     finishGame: async (id) => {
-        const { error } = await supabase.from('games').update({ is_finished: true }).eq('id', id);
-        if (error) {
+        try {
+            await updateDoc(doc(db, GAMES_COL, id), { isFinished: true });
+        } catch (error) {
             console.error(error);
             return;
         }
@@ -223,32 +273,29 @@ export const useStore = create<AppState>((set, get) => ({
     },
 
     updateStats: async (newStats) => {
-        // Check if stats exist for this player/game combo
-        const { data: existing } = await supabase
-            .from('stats')
-            .select('id')
-            .eq('player_id', newStats.playerId)
-            .eq('game_id', newStats.gameId)
-            .single();
-
         const payload = {
-            player_id: newStats.playerId,
-            game_id: newStats.gameId,
+            playerId: newStats.playerId,
+            gameId: newStats.gameId,
             pa: newStats.pa, ab: newStats.ab,
             h1: newStats.h1, h2: newStats.h2, h3: newStats.h3, hr: newStats.hr,
             rbi: newStats.rbi, bb: newStats.bb, so: newStats.so, sf: newStats.sf, e: newStats.e
         };
 
-        let error;
-        if (existing) {
-            const res = await supabase.from('stats').update(payload).eq('id', existing.id);
-            error = res.error;
-        } else {
-            const res = await supabase.from('stats').insert([payload]);
-            error = res.error;
-        }
+        try {
+            // Check if stats exist for this player/game combo
+            const existingSnap = await getDocs(query(
+                collection(db, STATS_COL),
+                where('playerId', '==', newStats.playerId),
+                where('gameId', '==', newStats.gameId),
+                limit(1)
+            ));
 
-        if (error) {
+            if (!existingSnap.empty) {
+                await updateDoc(doc(db, STATS_COL, existingSnap.docs[0].id), payload);
+            } else {
+                await addDoc(collection(db, STATS_COL), payload);
+            }
+        } catch (error) {
             console.error(error);
             return;
         }

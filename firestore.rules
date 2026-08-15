@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// Access model:
+//   - Anyone can READ players/games/stats (matches the previous "public
+//     access" behavior for viewing — no login needed to see stats).
+//   - Only a signed-in user (Firebase Authentication, Email/Password) can
+//     WRITE — create, update, or delete — players/games/stats. There is a
+//     single tier: any account you create in Firebase Auth has full write
+//     access to everything (add players, record/edit games & stats, delete
+//     players, clear all data, run the legacy import).
+//
+// This replaces the old client-side-only "admin password" check
+// (players/page.tsx used to compare a typed password against a hardcoded
+// string) with a real server-side check. Create one Firebase Auth account
+// per teammate who needs to make changes — see MIGRATION_GUIDE.md /
+// AUTH_SETUP.md for how.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /players/{playerId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /games/{gameId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /stats/{statId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}

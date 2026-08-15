@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, LogIn, LogOut, UserCircle } from 'lucide-react';
 import { useState } from 'react';
+import { useAuthStore } from '@/lib/authStore';
 
 const navItems = [
     { name: 'Dashboard', href: '/' },
@@ -17,6 +18,7 @@ const navItems = [
 export function Navbar() {
     const pathname = usePathname();
     const [isOpen, setIsOpen] = useState(false);
+    const { user, openSignIn, signOut } = useAuthStore();
 
     return (
         <nav className="bg-slate-900 text-white shadow-lg">
@@ -29,8 +31,8 @@ export function Navbar() {
                     </div>
 
                     {/* Desktop Menu */}
-                    <div className="hidden md:block">
-                        <div className="ml-10 flex items-baseline space-x-4">
+                    <div className="hidden md:flex items-center gap-2">
+                        <div className="flex items-baseline space-x-4">
                             {navItems.map((item) => (
                                 <Link
                                     key={item.name}
@@ -45,6 +47,33 @@ export function Navbar() {
                                     {item.name}
                                 </Link>
                             ))}
+                        </div>
+
+                        <div className="pl-4 ml-2 border-l border-slate-800">
+                            {user ? (
+                                <div className="flex items-center gap-3">
+                                    <span className="hidden lg:flex items-center gap-1 text-xs text-slate-400">
+                                        <UserCircle className="h-4 w-4" /> {user.email}
+                                    </span>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => signOut()}
+                                        className="text-slate-300 hover:text-white hover:bg-slate-800"
+                                    >
+                                        <LogOut className="h-4 w-4 mr-1" /> Sign Out
+                                    </Button>
+                                </div>
+                            ) : (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openSignIn()}
+                                    className="text-slate-300 hover:text-white hover:bg-slate-800"
+                                >
+                                    <LogIn className="h-4 w-4 mr-1" /> Sign In
+                                </Button>
+                            )}
                         </div>
                     </div>
 
@@ -81,6 +110,24 @@ export function Navbar() {
                                 {item.name}
                             </Link>
                         ))}
+
+                        <div className="pt-2 mt-2 border-t border-slate-800">
+                            {user ? (
+                                <button
+                                    onClick={() => { signOut(); setIsOpen(false); }}
+                                    className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+                                >
+                                    <LogOut className="h-4 w-4" /> Sign Out ({user.email})
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => { openSignIn(); setIsOpen(false); }}
+                                    className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+                                >
+                                    <LogIn className="h-4 w-4" /> Sign In
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

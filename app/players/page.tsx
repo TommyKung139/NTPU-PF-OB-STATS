@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useStore, Player, PlayerStats, Game } from '@/lib/store';
+import { useAuthStore } from '@/lib/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -19,7 +20,6 @@ import {
     DialogHeader,
     DialogTitle,
     DialogFooter,
-    DialogDescription,
 } from '@/components/ui/dialog';
 import {
     AlertDialog,
@@ -237,17 +237,16 @@ function PlayerDetailsPanel({ player, stats, players, games }: { player: Player,
 
 export default function PlayersPage() {
     const { players, stats, games, addPlayer, updatePlayer, deletePlayer, clearAllData } = useStore();
+    const requireAuth = useAuthStore((s) => s.requireAuth);
 
     // Player Edit/Add State
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
     const [formData, setFormData] = useState({ name: '', number: '', image_url: '' });
 
-    // Password & Action State
-    const [isPasswordOpen, setIsPasswordOpen] = useState(false);
-    const [password, setPassword] = useState('');
-    const [pendingAction, setPendingAction] = useState<'import' | 'delete' | null>(null);
-    const [passwordError, setPasswordError] = useState('');
+    // Destructive-action confirmation state (the real permission check now
+    // happens via Firebase Auth + Firestore rules — this is just a "are you
+    // sure?" UX step, not a security boundary).
     const [isDeleteWarningOpen, setIsDeleteWarningOpen] = useState(false);
 
     // Table Expansion State
@@ -270,6 +269,7 @@ export default function PlayersPage() {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!requireAuth()) return; // opens sign-in dialog if not signed in
         if (editingPlayer) {
             updatePlayer(editingPlayer.id, formData);
         } else {
@@ -310,37 +310,18 @@ export default function PlayersPage() {
     };
 
     const initiateImport = () => {
-        setPendingAction('import');
-        setPassword('');
-        setPasswordError('');
-        setIsPasswordOpen(true);
+        if (!requireAuth()) return; // opens sign-in dialog if not signed in
+        executeImport();
     };
 
     const initiateDelete = () => {
+        if (!requireAuth()) return; // opens sign-in dialog if not signed in
         setIsDeleteWarningOpen(true);
     };
 
     const confirmDeleteWarning = () => {
         setIsDeleteWarningOpen(false);
-        setPendingAction('delete');
-        setPassword('');
-        setPasswordError('');
-        setIsPasswordOpen(true);
-    };
-
-    const handlePasswordSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (password === 'NTPUPFOB') {
-            setIsPasswordOpen(false);
-            if (pendingAction === 'import') {
-                await executeImport();
-            } else if (pendingAction === 'delete') {
-                await executeDelete();
-            }
-            setPendingAction(null);
-        } else {
-            setPasswordError('確定要刪掉嗎？要的話，提示：北大財政OB英文');
-        }
+        executeDelete();
     };
 
     const executeDelete = async () => {
@@ -523,7 +504,7 @@ export default function PlayersPage() {
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        onClick={() => deletePlayer(player.id)}
+                                                        onClick={() => { if (!requireAuth()) return; deletePlayer(player.id); }}
                                                         className="hover:text-red-600"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
@@ -642,38 +623,7 @@ export default function PlayersPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Password Dialog */}
-            <Dialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Authentication Required</DialogTitle>
-                        <DialogDescription>
-                            Please enter the administrator password to continue.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handlePasswordSubmit} className="space-y-4">
-                        <div className="grid gap-2">
-                            <Input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter Password"
-                                autoFocus
-                            />
-                            {passwordError && (
-                                <p className="text-sm text-red-600 font-medium">
-                                    {passwordError}
-                                </p>
-                            )}
-                        </div>
-                        <DialogFooter>
-                            <Button type="submit">Confirm</Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* Delete Warning Alert */}
+            {/* Delete Warning Alert — sign-in is already required to get here (see initiateDelete) */}
             <AlertDialog open={isDeleteWarningOpen} onOpenChange={setIsDeleteWarningOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>

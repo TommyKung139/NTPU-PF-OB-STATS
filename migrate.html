@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>NTPU PF OB Stats — Supabase → Firestore Migration</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root { color-scheme: light; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 860px; margin: 40px auto; padding: 0 20px; color: #1e293b; background:#f8fafc; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  p.sub { color: #64748b; margin-top: 0; }
+  fieldset { border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; background: #fff; }
+  legend { font-weight: 600; padding: 0 6px; }
+  label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 10px; margin-bottom: 4px; color: #334155; }
+  input, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; font-family: inherit; }
+  textarea { font-family: ui-monospace, monospace; font-size: 0.8rem; min-height: 110px; }
+  button { background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.9rem; margin-right: 10px; margin-top: 12px; }
+  button.secondary { background: #64748b; }
+  button.danger { background: #dc2626; }
+  button:disabled { background: #94a3b8; cursor: not-allowed; }
+  #log { background: #0f172a; color: #e2e8f0; font-family: ui-monospace, monospace; font-size: 0.8rem; border-radius: 10px; padding: 14px; height: 320px; overflow-y: auto; white-space: pre-wrap; }
+  .log-ok { color: #4ade80; }
+  .log-err { color: #f87171; }
+  .log-warn { color: #fbbf24; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 220px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; background: #dbeafe; color: #1d4ed8; margin-left: 6px; }
+  .counts { display: flex; gap: 12px; margin-top: 10px; }
+  .count-box { flex: 1; background: #f1f5f9; border-radius: 8px; padding: 10px 14px; text-align: center; }
+  .count-box .n { font-size: 1.4rem; font-weight: 700; }
+  .count-box .l { font-size: 0.75rem; color: #64748b; }
+</style>
+</head>
+<body>
+
+<h1>NTPU PF OB Stats <span class="badge">migration tool</span></h1>
+<p class="sub">One-time copy of Players / Games / Stats from the old Supabase database into a new Firestore database. Runs entirely in your browser — nothing is sent anywhere except Supabase (read) and Firebase (write).</p>
+
+<fieldset>
+  <legend>1. Source — Supabase (pre-filled from the public repo, read-only)</legend>
+  <div class="row">
+    <div>
+      <label>Supabase URL</label>
+      <input id="sbUrl" value="https://eshqcnqrwtclfosogdjg.supabase.co" />
+    </div>
+  </div>
+  <label>Supabase anon key</label>
+  <textarea id="sbKey">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVzaHFjbnFyd3RjbGZvc29nZGpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM4MDU0ODksImV4cCI6MjA3OTM4MTQ4OX0.TPU4i5yxh4ac0ytQCggwwExQP3Ub4hP7Qj0KkpPT96E</textarea>
+</fieldset>
+
+<fieldset>
+  <legend>2. Destination — Firebase web config</legend>
+  <p style="margin-top:0;font-size:0.85rem;color:#64748b;">Firebase Console → Project settings → General → Your apps → Web app → SDK setup and configuration. Paste the whole <code>firebaseConfig</code> object below (or fill the fields individually).</p>
+  <textarea id="fbConfigRaw">{
+  "apiKey": "AIzaSyCFYZH4ojBjc6sGJyPVOM1u4xY3Td6ZIIE",
+  "authDomain": "offsite-8a6b8.firebaseapp.com",
+  "projectId": "offsite-8a6b8",
+  "storageBucket": "offsite-8a6b8.firebasestorage.app",
+  "messagingSenderId": "562142925796",
+  "appId": "1:562142925796:web:734a6e1b1b67817b31edf1",
+  "measurementId": "G-WD5YHX21ZV"
+}</textarea>
+</fieldset>
+
+<fieldset>
+  <legend>3. Run</legend>
+  <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+    <input type="checkbox" id="overwrite" style="width:auto;" />
+    Overwrite documents that already exist in Firestore (same ID). Leave unchecked to skip them.
+  </label>
+  <div>
+    <button id="btnPreview">Preview (read-only)</button>
+    <button id="btnMigrate" class="danger" disabled>Run Migration (writes to Firestore)</button>
+  </div>
+  <div class="counts" id="counts" style="display:none;">
+    <div class="count-box"><div class="n" id="cPlayers">-</div><div class="l">Players</div></div>
+    <div class="count-box"><div class="n" id="cGames">-</div><div class="l">Games</div></div>
+    <div class="count-box"><div class="n" id="cStats">-</div><div class="l">Stats rows</div></div>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Log</legend>
+  <div id="log">Waiting…</div>
+</fieldset>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+  const logEl = document.getElementById('log');
+  function log(msg, cls) {
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = msg;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function clearLog() { logEl.innerHTML = ''; }
+
+  let fetched = null; // { players, games, stats }
+
+  document.getElementById('btnPreview').addEventListener('click', async () => {
+    clearLog();
+    document.getElementById('btnMigrate').disabled = true;
+    document.getElementById('counts').style.display = 'none';
+
+    const url = document.getElementById('sbUrl').value.trim();
+    const key = document.getElementById('sbKey').value.trim();
+    if (!url || !key) { log('Missing Supabase URL/key.', 'log-err'); return; }
+
+    try {
+      log('Connecting to Supabase…');
+      const sb = window.supabase.createClient(url, key);
+
+      const [pRes, gRes, sRes] = await Promise.all([
+        sb.from('players').select('*'),
+        sb.from('games').select('*'),
+        sb.from('stats').select('*'),
+      ]);
+
+      if (pRes.error) throw pRes.error;
+      if (gRes.error) throw gRes.error;
+      if (sRes.error) throw sRes.error;
+
+      fetched = { players: pRes.data || [], games: gRes.data || [], stats: sRes.data || [] };
+
+      log(`Fetched ${fetched.players.length} players, ${fetched.games.length} games, ${fetched.stats.length} stats rows.`, 'log-ok');
+      document.getElementById('cPlayers').textContent = fetched.players.length;
+      document.getElementById('cGames').textContent = fetched.games.length;
+      document.getElementById('cStats').textContent = fetched.stats.length;
+      document.getElementById('counts').style.display = 'flex';
+
+      // sanity check: every stats row should reference a known player/game
+      const playerIds = new Set(fetched.players.map(p => p.id));
+      const gameIds = new Set(fetched.games.map(g => g.id));
+      const orphans = fetched.stats.filter(s => !playerIds.has(s.player_id) || !gameIds.has(s.game_id));
+      if (orphans.length) {
+        log(`Warning: ${orphans.length} stats rows reference a missing player/game and will be skipped.`, 'log-warn');
+      }
+
+      document.getElementById('btnMigrate').disabled = false;
+      log('Preview complete. Fill in the Firebase config, then click "Run Migration" when ready.', 'log-ok');
+    } catch (err) {
+      log('Error reading from Supabase: ' + (err.message || err), 'log-err');
+    }
+  });
+
+  document.getElementById('btnMigrate').addEventListener('click', async () => {
+    if (!fetched) { log('Run Preview first.', 'log-err'); return; }
+
+    let fbConfig;
+    try {
+      fbConfig = JSON.parse(document.getElementById('fbConfigRaw').value.trim());
+    } catch (e) {
+      log('Firebase config is not valid JSON. Paste the firebaseConfig object as shown in the Firebase console (with quotes around keys).', 'log-err');
+      return;
+    }
+    if (!fbConfig.projectId) { log('Firebase config is missing projectId.', 'log-err'); return; }
+
+    const overwrite = document.getElementById('overwrite').checked;
+    document.getElementById('btnMigrate').disabled = true;
+
+    try {
+      log('Connecting to Firebase project "' + fbConfig.projectId + '"…');
+      const app = initializeApp(fbConfig, 'migration-' + Date.now());
+      const db = getFirestore(app);
+
+      const totals = { created: 0, skipped: 0, failed: 0 };
+
+      async function upsert(colName, id, data) {
+        const ref = doc(db, colName, id);
+        if (!overwrite) {
+          const existing = await getDoc(ref);
+          if (existing.exists()) { totals.skipped++; return; }
+        }
+        await setDoc(ref, data);
+        totals.created++;
+      }
+
+      async function migrateSection(label, items, colName, mapFn) {
+        log(`Migrating ${label}…`);
+        const before = { ...totals };
+        for (const item of items) {
+          try {
+            await upsert(colName, item.__id, mapFn(item));
+          } catch (e) {
+            totals.failed++;
+            log('  failed ' + colName + ' ' + item.__id + ': ' + e.message, 'log-err');
+          }
+        }
+        log(`${label} done. created/updated=${totals.created - before.created} skipped=${totals.skipped - before.skipped} failed=${totals.failed - before.failed}`, 'log-ok');
+      }
+
+      await migrateSection('players', fetched.players.map(p => ({ ...p, __id: p.id })), 'players', (p) => ({
+        name: p.name,
+        number: p.number,
+        ...(p.image_url ? { image_url: p.image_url } : {}),
+      }));
+
+      await migrateSection('games', fetched.games.map(g => ({ ...g, __id: g.id })), 'games', (g) => ({
+        opponent: g.opponent,
+        date: g.date,
+        isFinished: !!g.is_finished,
+      }));
+
+      const playerIds = new Set(fetched.players.map(p => p.id));
+      const gameIds = new Set(fetched.games.map(g => g.id));
+      const validStats = fetched.stats.filter(s => playerIds.has(s.player_id) && gameIds.has(s.game_id));
+      const orphanCount = fetched.stats.length - validStats.length;
+
+      await migrateSection('stats', validStats.map(s => ({ ...s, __id: s.id })), 'stats', (s) => ({
+        playerId: s.player_id,
+        gameId: s.game_id,
+        pa: s.pa || 0, ab: s.ab || 0, h1: s.h1 || 0, h2: s.h2 || 0, h3: s.h3 || 0, hr: s.hr || 0,
+        rbi: s.rbi || 0, bb: s.bb || 0, so: s.so || 0, sf: s.sf || 0, e: s.e || 0,
+      }));
+      if (orphanCount) log(`Skipped ${orphanCount} orphaned stats rows (missing player/game).`, 'log-warn');
+
+      log('---');
+      log(`DONE. created/updated=${totals.created} skipped(existing)=${totals.skipped} failed=${totals.failed}`, totals.failed ? 'log-warn' : 'log-ok');
+      log('Open the Firebase Console → Firestore Database to verify the players/games/stats collections.', 'log-ok');
+    } catch (err) {
+      log('Migration error: ' + (err.message || err), 'log-err');
+    } finally {
+      document.getElementById('btnMigrate').disabled = false;
+    }
+  });
+</script>
+
+</body>
+</html>
