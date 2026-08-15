@@ -19,6 +19,7 @@ export const viewport = {
 
 import { StoreInitializer } from '@/components/StoreInitializer';
 import { GlobalLoader } from '@/components/GlobalLoader';
+import { SignInDialog } from '@/components/SignInDialog';
 
 export default function RootLayout({
   children,
@@ -30,6 +31,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <StoreInitializer />
         <GlobalLoader />
+        <SignInDialog />
         <Navbar />
         <main className="min-h-screen bg-slate-50">
           {children}
