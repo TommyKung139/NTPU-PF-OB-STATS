@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// Mirrors firestore.rules: public read (player photos are shown to
+// anyone viewing the roster, no login needed), sign-in required to write
+// (uploading/replacing a photo). See AUTH_SETUP.md.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /player-photos/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}

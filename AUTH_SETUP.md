@@ -32,12 +32,13 @@ open to everyone.
 ## 3. Publish the security rules
 
 Firebase Console → **Firestore Database → Rules**, paste the contents of
-`firestore.rules` from this repo, click **Publish**.
+`firestore.rules` from this repo, click **Publish**. Do the same for
+**Storage → Rules** with `storage.rules` (covers player photo uploads).
 
 If you followed `MIGRATION_GUIDE.md`, you had a *temporary* fully-open rule
-set published so the data migration could write without signing in — this
-step replaces that with the real, locked-down rules. Do this only after the
-migration has finished.
+set published (for both Firestore and Storage) so the data migration could
+write without signing in — this step replaces those with the real,
+locked-down rules. Do this only after the migration has finished.
 
 ```
 allow read: if true;
@@ -45,8 +46,8 @@ allow write: if request.auth != null;
 ```
 
 This is enforced on Firebase's servers — even if someone bypasses the app
-UI entirely and calls the Firestore API directly, they still can't write
-without a valid signed-in session.
+UI entirely and calls the Firestore/Storage API directly, they still can't
+write without a valid signed-in session.
 
 ## 4. How it works in the app
 
@@ -57,12 +58,12 @@ without a valid signed-in session.
   `app/layout.tsx`.
 - `components/Navbar.tsx` — shows **Sign In** when logged out, or the
   signed-in email + **Sign Out** when logged in.
-- Every write action (`app/players/page.tsx`'s add/edit/delete/import/clear,
-  `app/record/page.tsx`'s save game) calls `requireAuth()` first. If nobody
-  is signed in, it pops open the sign-in dialog instead of attempting the
-  write — this is just a UX nicety; `firestore.rules` is what actually
-  enforces the restriction, so this can't be bypassed by tampering with the
-  frontend.
+- Every write action (`app/players/page.tsx`'s add/edit/delete/import/clear
+  and photo upload, `app/record/page.tsx`'s save game) calls `requireAuth()`
+  first. If nobody is signed in, it pops open the sign-in dialog instead of
+  attempting the write — this is just a UX nicety; `firestore.rules` /
+  `storage.rules` are what actually enforce the restriction, so this can't
+  be bypassed by tampering with the frontend.
 
 There's no self-serve signup screen — accounts are only created via the
 Firebase Console (step 2), since anyone who can create an account gets full

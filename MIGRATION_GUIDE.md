@@ -28,6 +28,14 @@ Follow these steps to finish the cutover.
   `gameId`) instead of Postgres's snake_case (`is_finished`, `player_id`,
   `game_id`) — this matches the app's TypeScript interfaces exactly, so
   `lib/store.ts` no longer needs to translate between the two.
+- Player photos now go through **Firebase Storage** instead of being
+  embedded as base64 in the player document. Postgres's `text` column had
+  no practical size limit, but Firestore caps a single field at ~1MB —
+  storing a photo inline there fails outright. `app/players/page.tsx`
+  uploads the file to Storage and stores only the (short) download URL;
+  `migrate.html` does the same for any legacy player whose `image_url` is
+  too large to inline. `storage.rules` added (same public-read /
+  auth-required-write model as `firestore.rules`).
 
 ## 1. Create the Firebase project
 
@@ -40,8 +48,12 @@ Follow these steps to finish the cutover.
    a nickname (e.g. "ntpu-pf-ob-stats"), skip Firebase Hosting unless you
    want it, and copy the `firebaseConfig` object it shows you — you'll need
    it twice (once for the migration tool, once for the app itself).
+4. Open **Build → Storage → Get started** to enable Firebase Storage (used
+   for player photos). Pick the same region as Firestore. You can accept
+   the default rules for now — step 2 below covers temporarily opening
+   them for the migration, and step 4 covers publishing the real ones.
 
-## 2. Temporarily open Firestore rules so the migration can write
+## 2. Temporarily open Firestore + Storage rules so the migration can write
 
 `migrate.html` (step 3) writes directly to Firestore using the client SDK,
 **without signing in** — so it needs permissive rules while it runs. A
@@ -66,6 +78,25 @@ service cloud.firestore {
 You'll replace this with the real, locked-down rules in step 4, *after*
 the migration and after Auth is set up — don't leave this published.
 
+Do the same for Storage — **Storage → Rules**, paste and **Publish**:
+
+```
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+This only matters if any player has a photo — `migrate.html` uploads
+oversized `image_url` values (legacy base64 photos too big to fit in a
+Firestore field, ~1MB+) to Storage during the migration; without open
+rules those specific uploads fail with `permission-denied` even though
+the rest of the migration succeeds.
+
 ## 3. Migrate the existing data
 
 Open **`migrate.html`** (in this repo) directly in your browser — no build
@@ -82,13 +113,35 @@ Steps on the page:
 1. Click **Preview** — confirms it can read Supabase and shows row counts.
 2. Paste your `firebaseConfig` object (from step 1) into the Firebase config
    box.
-3. Click **Run Migration**. Watch the log for `DONE. created/updated=...`.
-4. Spot-check in the Firebase Console → Firestore Database that
+3. **If you've already published the real, locked-down `firestore.rules` /
+   `storage.rules`** (write requires sign-in), sign in here first with a
+   Firebase Auth account (see `AUTH_SETUP.md`) — otherwise every write will
+   fail with "Missing or insufficient permissions." If you're still on the
+   temporary open rules from step 2 above, skip this.
+4. Click **Run Migration**. Watch the log for `DONE. created/updated=...`.
+5. Spot-check in the Firebase Console → Firestore Database that
    `players`, `games`, and `stats` collections look right.
 
 This is safe to re-run: by default it **skips documents that already
 exist** (same ID). Check "Overwrite documents that already exist" only if
-you intentionally want to re-copy over existing Firestore data.
+you intentionally want to re-copy over existing Firestore data — this also
+means it's safe to just click **Run Migration** again if some players
+failed on an earlier run (e.g. due to oversized photos before Storage
+rules were open): only the ones that failed (and so were never created)
+will be retried, everything else is skipped as already-migrated.
+
+> **Seeing `failed players <id>: The value of property "image_url" is
+> longer than 1048487 bytes`?** That player's Supabase `image_url` was a
+> big base64 photo that doesn't fit in a single Firestore field. Make sure
+> Storage is enabled with open rules (above), then click **Run Migration**
+> again — those players will now go through the Storage upload path
+> instead of failing.
+
+> **Seeing `Missing or insufficient permissions`?** Your Firestore/Storage
+> rules are already locked down to require sign-in (step 4 below), but you
+> haven't signed in on this page yet. Either sign in via step 3 above and
+> retry, or temporarily republish the open rules from step 2, finish the
+> migration, then republish the real rules again.
 
 ## 4. Set up Auth and publish the real security rules
 
@@ -97,7 +150,8 @@ Email/Password sign-in, create an account for each teammate who needs
 write access, then paste the real `firestore.rules` from this repo
 (public read, sign-in required to write) into Firebase Console →
 **Firestore Database → Rules** and **Publish**, replacing the temporary
-open rules from step 2.
+open rules from step 2. Do the same with `storage.rules` under
+**Storage → Rules** — same model, same reason.
 
 ## 5. Configure the app
 
