@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, type FirebaseOptions } from 'firebase/app';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getAuth, type Auth } from 'firebase/auth';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 // Firebase Web config — these values are safe to expose client-side
 // (equivalent to the old Supabase URL + anon key). Access control is
@@ -44,3 +45,4 @@ const app = isConfigured ? (getApps().length ? getApp() : initializeApp(firebase
 
 export const db = (app ? getFirestore(app) : undefined) as Firestore;
 export const auth = (app ? getAuth(app) : undefined) as Auth;
+export const storage = (app ? getStorage(app) : undefined) as FirebaseStorage;

@@ -4,6 +4,8 @@ import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useStore, Player, PlayerStats, Game } from '@/lib/store';
 import { useAuthStore } from '@/lib/authStore';
+import { storage } from '@/lib/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -254,6 +256,8 @@ export default function PlayersPage() {
 
     // Image Upload Ref (for Edit Dialog)
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+    const [photoError, setPhotoError] = useState('');
 
     const toggleRow = (playerId: string) => {
         const newExpanded = new Set(expandedRows);
@@ -269,6 +273,7 @@ export default function PlayersPage() {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (isUploadingPhoto) return; // wait for the photo upload to finish
         if (!requireAuth()) return; // opens sign-in dialog if not signed in
         if (editingPlayer) {
             updatePlayer(editingPlayer.id, formData);
@@ -283,26 +288,44 @@ export default function PlayersPage() {
     const openEdit = (player: Player) => {
         setEditingPlayer(player);
         setFormData({ name: player.name, number: player.number, image_url: player.image_url || '' });
+        setPhotoError('');
         setIsDialogOpen(true);
     };
 
     const openAdd = () => {
         setEditingPlayer(null);
         setFormData({ name: '', number: '', image_url: '' });
+        setPhotoError('');
         setIsDialogOpen(true);
     };
 
+    // Player photos go to Firebase Storage, not straight into the Firestore
+    // document. Firestore caps a single field's value at ~1MB, and a
+    // base64-encoded photo blows past that easily — storing the raw data
+    // URL (which worked fine on Postgres/Supabase) fails outright here.
+    // Instead we upload the file to Storage and only store the resulting
+    // (short) download URL string on the player doc.
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64String = reader.result as string;
-                setFormData(prev => ({ ...prev, image_url: base64String }));
-            };
-            reader.readAsDataURL(file);
-        }
         if (fileInputRef.current) fileInputRef.current.value = '';
+        if (!file) return;
+
+        if (!requireAuth()) return; // opens sign-in dialog if not signed in
+
+        setPhotoError('');
+        setIsUploadingPhoto(true);
+        try {
+            const path = `player-photos/${Date.now()}-${file.name}`;
+            const fileRef = storageRef(storage, path);
+            await uploadBytes(fileRef, file);
+            const url = await getDownloadURL(fileRef);
+            setFormData(prev => ({ ...prev, image_url: url }));
+        } catch (err) {
+            console.error('Photo upload failed', err);
+            setPhotoError('Photo upload failed. Please try again with a smaller image.');
+        } finally {
+            setIsUploadingPhoto(false);
+        }
     };
 
     const removeImage = () => {
@@ -588,11 +611,13 @@ export default function PlayersPage() {
                                         type="button"
                                         variant="outline"
                                         size="sm"
+                                        disabled={isUploadingPhoto}
                                         onClick={() => fileInputRef.current?.click()}
                                     >
-                                        <Upload className="h-4 w-4 mr-2" /> Upload Photo
+                                        <Upload className="h-4 w-4 mr-2" />
+                                        {isUploadingPhoto ? 'Uploading…' : 'Upload Photo'}
                                     </Button>
-                                    {formData.image_url && (
+                                    {formData.image_url && !isUploadingPhoto && (
                                         <Button
                                             type="button"
                                             variant="ghost"
@@ -612,6 +637,9 @@ export default function PlayersPage() {
                                     onChange={handleFileChange}
                                 />
                             </div>
+                            {photoError && (
+                                <p className="text-sm text-red-600 font-medium">{photoError}</p>
+                            )}
                         </div>
 
                         <DialogFooter>

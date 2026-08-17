@@ -64,7 +64,31 @@
 </fieldset>
 
 <fieldset>
-  <legend>3. Run</legend>
+  <legend>3. Sign in (only needed if your Firestore/Storage rules already require auth)</legend>
+  <p style="margin-top:0;font-size:0.85rem;color:#64748b;">
+    If you haven't published the real (locked-down) rules yet, skip this — the
+    default temporary-open rules don't need it. If you already published the
+    real <code>firestore.rules</code> / <code>storage.rules</code> (write requires
+    sign-in), sign in below with a Firebase Auth account first (see
+    <code>AUTH_SETUP.md</code> for how to create one), so the migration writes
+    as an authenticated user instead of needing the rules reopened.
+  </p>
+  <div class="row">
+    <div>
+      <label>Email</label>
+      <input id="authEmail" type="email" placeholder="you@example.com" />
+    </div>
+    <div>
+      <label>Password</label>
+      <input id="authPassword" type="password" />
+    </div>
+  </div>
+  <button id="btnSignIn" class="secondary">Sign In</button>
+  <span id="authStatus" style="margin-left:8px;font-size:0.85rem;color:#64748b;">Not signed in</span>
+</fieldset>
+
+<fieldset>
+  <legend>4. Run</legend>
   <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
     <input type="checkbox" id="overwrite" style="width:auto;" />
     Overwrite documents that already exist in Firestore (same ID). Leave unchecked to skip them.
@@ -88,6 +112,19 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
   import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+  import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
+  import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
+  // Firestore caps a single field at ~1,048,487 bytes AND the whole
+  // document at 1,048,576 bytes total (fields + per-field/per-doc storage
+  // overhead). A threshold close to the field cap (900,000 was tried
+  // first) still leaves enough overhead room that some documents blow the
+  // *document* limit even though no single field looks oversized — and
+  // Firestore sometimes reports that failure confusingly as "Missing or
+  // insufficient permissions" instead of a clear size error, which is
+  // exactly what happened here. Using a much smaller threshold means any
+  // real photo goes to Storage, well clear of either limit.
+  const MAX_INLINE_IMAGE_BYTES = 200000;
 
   const logEl = document.getElementById('log');
   function log(msg, cls) {
@@ -100,6 +137,47 @@
   function clearLog() { logEl.innerHTML = ''; }
 
   let fetched = null; // { players, games, stats }
+
+  // Shared Firebase app/instances — created once (from whatever config is
+  // currently in the textarea) and reused by both Sign In and Run
+  // Migration, so a successful sign-in actually applies to the migration's
+  // writes instead of a separate, still-anonymous app instance.
+  let fbApp = null, fbAuth = null, fbDb = null, fbStorage = null;
+  function ensureFirebaseApp() {
+    if (fbApp) return fbApp;
+    let fbConfig;
+    try {
+      fbConfig = JSON.parse(document.getElementById('fbConfigRaw').value.trim());
+    } catch (e) {
+      throw new Error('Firebase config is not valid JSON. Paste the firebaseConfig object as shown in the Firebase console (with quotes around keys).');
+    }
+    if (!fbConfig.projectId) throw new Error('Firebase config is missing projectId.');
+    fbApp = initializeApp(fbConfig, 'migration-' + Date.now());
+    fbAuth = getAuth(fbApp);
+    fbDb = getFirestore(fbApp);
+    fbStorage = getStorage(fbApp);
+    return fbApp;
+  }
+
+  document.getElementById('btnSignIn').addEventListener('click', async () => {
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+    const statusEl = document.getElementById('authStatus');
+    if (!email || !password) { statusEl.textContent = 'Enter email and password.'; statusEl.style.color = '#dc2626'; return; }
+    try {
+      ensureFirebaseApp();
+      statusEl.textContent = 'Signing in…';
+      statusEl.style.color = '#64748b';
+      const cred = await signInWithEmailAndPassword(fbAuth, email, password);
+      statusEl.textContent = 'Signed in as ' + cred.user.email;
+      statusEl.style.color = '#16a34a';
+      log('Signed in as ' + cred.user.email + '. Now click "Run Migration" (again, if you already ran it before signing in).', 'log-ok');
+    } catch (err) {
+      statusEl.textContent = 'Sign-in failed: ' + (err.message || err);
+      statusEl.style.color = '#dc2626';
+      log('Sign-in failed: ' + (err.message || err), 'log-err');
+    }
+  });
 
   document.getElementById('btnPreview').addEventListener('click', async () => {
     clearLog();
@@ -150,22 +228,17 @@
   document.getElementById('btnMigrate').addEventListener('click', async () => {
     if (!fetched) { log('Run Preview first.', 'log-err'); return; }
 
-    let fbConfig;
-    try {
-      fbConfig = JSON.parse(document.getElementById('fbConfigRaw').value.trim());
-    } catch (e) {
-      log('Firebase config is not valid JSON. Paste the firebaseConfig object as shown in the Firebase console (with quotes around keys).', 'log-err');
-      return;
-    }
-    if (!fbConfig.projectId) { log('Firebase config is missing projectId.', 'log-err'); return; }
-
     const overwrite = document.getElementById('overwrite').checked;
     document.getElementById('btnMigrate').disabled = true;
 
     try {
-      log('Connecting to Firebase project "' + fbConfig.projectId + '"…');
-      const app = initializeApp(fbConfig, 'migration-' + Date.now());
-      const db = getFirestore(app);
+      ensureFirebaseApp();
+      const db = fbDb;
+      const storage = fbStorage;
+      log('==================== New migration run ====================');
+      log('Connecting to Firebase project "' + fbApp.options.projectId + '"' +
+        (fbAuth.currentUser ? ` as ${fbAuth.currentUser.email}` : ' (NOT signed in — writes will fail unless rules are open)'),
+        fbAuth.currentUser ? 'log-ok' : 'log-warn');
 
       const totals = { created: 0, skipped: 0, failed: 0 };
 
@@ -183,21 +256,45 @@
         log(`Migrating ${label}…`);
         const before = { ...totals };
         for (const item of items) {
+          let data;
           try {
-            await upsert(colName, item.__id, mapFn(item));
+            data = await mapFn(item); // mapFn may be async (e.g. player photo upload)
+            await upsert(colName, item.__id, data);
           } catch (e) {
             totals.failed++;
-            log('  failed ' + colName + ' ' + item.__id + ': ' + e.message, 'log-err');
+            const authState = fbAuth && fbAuth.currentUser ? ('signed in as ' + fbAuth.currentUser.email) : 'NOT signed in';
+            const sizeInfo = data ? ('~' + new Blob([JSON.stringify(data)]).size + ' bytes') : 'size unknown (mapFn threw)';
+            log('  failed ' + colName + ' ' + item.__id + ': ' + e.message + '  [' + authState + ', doc ' + sizeInfo + ']', 'log-err');
           }
         }
         log(`${label} done. created/updated=${totals.created - before.created} skipped=${totals.skipped - before.skipped} failed=${totals.failed - before.failed}`, 'log-ok');
       }
 
-      await migrateSection('players', fetched.players.map(p => ({ ...p, __id: p.id })), 'players', (p) => ({
-        name: p.name,
-        number: p.number,
-        ...(p.image_url ? { image_url: p.image_url } : {}),
-      }));
+      // If image_url is a large base64 data URL, upload it to Firebase
+      // Storage instead of trying to inline it in the Firestore doc.
+      async function resolveImageUrl(playerId, imageUrl) {
+        if (!imageUrl) return undefined;
+        const looksLikeDataUrl = imageUrl.startsWith('data:');
+        const approxBytes = imageUrl.length; // data URL is already the wire size, close enough
+        if (!looksLikeDataUrl || approxBytes <= MAX_INLINE_IMAGE_BYTES) {
+          return imageUrl;
+        }
+        log(`  player ${playerId}: image_url is ${approxBytes} bytes (over the Firestore field limit) — uploading to Storage instead…`, 'log-warn');
+        const fileRef = storageRef(storage, `player-photos/legacy-${playerId}`);
+        await uploadString(fileRef, imageUrl, 'data_url');
+        const url = await getDownloadURL(fileRef);
+        log(`  player ${playerId}: uploaded to Storage → ${url}`, 'log-ok');
+        return url;
+      }
+
+      await migrateSection('players', fetched.players.map(p => ({ ...p, __id: p.id })), 'players', async (p) => {
+        const imageUrl = await resolveImageUrl(p.id, p.image_url);
+        return {
+          name: p.name,
+          number: p.number,
+          ...(imageUrl ? { image_url: imageUrl } : {}),
+        };
+      });
 
       await migrateSection('games', fetched.games.map(g => ({ ...g, __id: g.id })), 'games', (g) => ({
         opponent: g.opponent,
