@@ -44,25 +44,28 @@
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --foreground: oklch(0.17 0.01 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.17 0.01 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.17 0.01 260);
+  /* Brand primary — validated categorical slot 1 (#2a78d6), see the
+     dataviz skill's reference palette. Used for the nav brand mark,
+     primary actions, active states, and the percentile chart's "poor" pole. */
+  --primary: #2a78d6;
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.967 0.003 260);
+  --secondary-foreground: oklch(0.17 0.01 260);
+  --muted: oklch(0.967 0.003 260);
+  --muted-foreground: oklch(0.51 0.02 260);
+  --accent: oklch(0.955 0.015 255);
+  --accent-foreground: oklch(0.205 0.02 260);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.91 0.005 260);
+  --input: oklch(0.91 0.005 260);
+  --ring: oklch(0.65 0.14 255);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -85,8 +88,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: #3987e5;
+  --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -120,6 +123,9 @@
     @apply overflow-x-hidden;
   }
   body {
-    @apply bg-background text-foreground w-full relative;
+    @apply bg-background text-foreground w-full relative antialiased;
+  }
+  h1, h2, h3 {
+    @apply tracking-tight;
   }
 }

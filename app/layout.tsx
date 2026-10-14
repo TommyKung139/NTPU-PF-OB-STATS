@@ -33,7 +33,7 @@ export default function RootLayout({
         <GlobalLoader />
         <SignInDialog />
         <Navbar />
-        <main className="min-h-screen bg-slate-50">
+        <main className="min-h-screen bg-slate-50/70">
           {children}
         </main>
       </body>
