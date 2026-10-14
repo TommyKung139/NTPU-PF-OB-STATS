@@ -138,6 +138,12 @@ function RecordGameContent() {
         }
     };
 
+    const steps = [
+        { n: 1, label: 'Game Details' },
+        { n: 2, label: 'Select Roster' },
+        { n: 3, label: 'Enter Stats' },
+    ];
+
     return (
         <div className="container mx-auto py-8 px-4 max-w-4xl relative">
             {isSaving && (
@@ -145,9 +151,9 @@ function RecordGameContent() {
                     <div className="flex flex-col items-center gap-6">
                         <div className="relative">
                             <div className="h-24 w-24 rounded-full border-4 border-slate-100"></div>
-                            <div className="absolute top-0 left-0 h-24 w-24 rounded-full border-4 border-green-500 border-t-transparent animate-spin"></div>
+                            <div className="absolute top-0 left-0 h-24 w-24 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                                <div className="bg-green-500 rounded-full p-3 shadow-lg shadow-green-500/20">
+                                <div className="bg-primary rounded-full p-3 shadow-lg shadow-primary/20">
                                     <Save className="h-8 w-8 text-white" />
                                 </div>
                             </div>
@@ -160,13 +166,28 @@ function RecordGameContent() {
                 </div>
             )}
 
-            <h1 className="text-3xl font-bold text-slate-900 mb-8">{isEditing ? 'Edit Game Stats' : 'Record Game Stats'}</h1>
+            <div className="mb-8">
+                <h1 className="text-2xl font-bold text-slate-900">{isEditing ? 'Edit Game Stats' : 'Record Game Stats'}</h1>
+                <div className="flex items-center gap-2 mt-4">
+                    {steps.map((s, i) => (
+                        <div key={s.n} className="flex items-center gap-2 flex-1">
+                            <div className={`flex items-center gap-2 ${step === s.n ? '' : 'opacity-60'}`}>
+                                <span className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${step >= s.n ? 'bg-primary text-white' : 'bg-slate-200 text-slate-500'}`}>
+                                    {s.n}
+                                </span>
+                                <span className="text-sm font-medium text-slate-600 hidden sm:inline">{s.label}</span>
+                            </div>
+                            {i < steps.length - 1 && <div className={`h-px flex-1 ${step > s.n ? 'bg-primary' : 'bg-slate-200'}`} />}
+                        </div>
+                    ))}
+                </div>
+            </div>
 
             {step === 1 && (
-                <Card>
+                <Card className="border-slate-200/80 shadow-sm">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Calendar className="h-5 w-5" /> Game Details
+                        <CardTitle className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                            <Calendar className="h-4 w-4 text-primary" /> Game details
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -192,7 +213,6 @@ function RecordGameContent() {
                             <Button
                                 onClick={() => setStep(2)}
                                 disabled={!gameData.opponent || isSaving}
-                                className="bg-blue-600"
                             >
                                 Next: Select Roster <ChevronRight className="ml-2 h-4 w-4" />
                             </Button>
@@ -202,20 +222,20 @@ function RecordGameContent() {
             )}
 
             {step === 2 && (
-                <Card>
+                <Card className="border-slate-200/80 shadow-sm">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Users className="h-5 w-5" /> Select Roster
+                        <CardTitle className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                            <Users className="h-4 w-4 text-primary" /> Select roster
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
                             {players.map(player => (
                                 <div
                                     key={player.id}
                                     className={`flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedPlayerIds.includes(player.id)
-                                        ? 'bg-blue-50 border-blue-200'
-                                        : 'hover:bg-slate-50'
+                                        ? 'bg-primary/5 border-primary/30'
+                                        : 'border-slate-200 hover:bg-slate-50'
                                         }`}
                                     onClick={() => !isSaving && handlePlayerToggle(player.id)}
                                 >
@@ -225,18 +245,17 @@ function RecordGameContent() {
                                         disabled={isSaving}
                                     />
                                     <div>
-                                        <span className="font-mono font-bold text-slate-600 mr-2">#{player.number}</span>
+                                        <span className="font-mono font-bold text-slate-400 mr-2">#{player.number}</span>
                                         <span className="font-medium">{player.name}</span>
                                     </div>
                                 </div>
                             ))}
                         </div>
-                        <div className="flex justify-between pt-4 border-t">
+                        <div className="flex justify-between pt-4 border-t border-slate-100">
                             <Button variant="outline" onClick={() => setStep(1)} disabled={isSaving}>Back</Button>
                             <Button
                                 onClick={() => setStep(3)}
                                 disabled={selectedPlayerIds.length === 0 || isSaving}
-                                className="bg-blue-600"
                             >
                                 Next: Enter Stats <ChevronRight className="ml-2 h-4 w-4" />
                             </Button>
@@ -253,11 +272,11 @@ function RecordGameContent() {
                         const { avg } = calculateStats(s);
 
                         return (
-                            <Card key={playerId} className="overflow-hidden">
-                                <CardHeader className="bg-slate-50 py-3">
+                            <Card key={playerId} className="overflow-hidden border-slate-200/80 shadow-sm">
+                                <CardHeader className="bg-slate-50 py-3 border-b border-slate-100">
                                     <div className="flex justify-between items-center">
-                                        <CardTitle className="text-lg flex items-center gap-2">
-                                            <span className="font-mono bg-white px-2 py-0.5 rounded border text-sm">#{player?.number}</span>
+                                        <CardTitle className="text-base flex items-center gap-2 font-semibold text-slate-800">
+                                            <span className="font-mono bg-white px-2 py-0.5 rounded border border-slate-200 text-xs text-slate-500">#{player?.number}</span>
                                             {player?.name}
                                         </CardTitle>
                                         <div className="text-sm font-mono text-slate-500">
@@ -278,16 +297,16 @@ function RecordGameContent() {
                                             { label: 'BB', key: 'bb' },
                                             { label: 'SO', key: 'so' },
                                             { label: 'SF', key: 'sf' },
-                                            { label: 'E', key: 'e', color: 'text-red-600' },
+                                            { label: 'E', key: 'e', color: 'text-red-500' },
                                         ].map((field) => (
                                             <div key={field.key} className="space-y-1">
-                                                <label className={`text-xs font-bold uppercase ${field.color || 'text-slate-500'}`}>
+                                                <label className={`text-[11px] font-bold uppercase tracking-wide ${field.color || 'text-slate-400'}`}>
                                                     {field.label}
                                                 </label>
                                                 <Input
                                                     type="number"
                                                     min="0"
-                                                    className="h-9 text-center font-mono"
+                                                    className="h-9 text-center font-mono tabular-nums"
                                                     value={s[field.key as keyof PlayerStats] || ''}
                                                     onChange={(e) => handleStatChange(playerId, field.key as keyof PlayerStats, e.target.value)}
                                                     onFocus={(e) => e.target.select()}
@@ -306,7 +325,7 @@ function RecordGameContent() {
                         <Button
                             onClick={handleSaveGame}
                             disabled={isSaving}
-                            className="bg-green-600 hover:bg-green-700 text-lg px-8"
+                            className="bg-green-600 hover:bg-green-700 text-base px-8"
                         >
                             {isSaving ? (isEditing ? 'Updating...' : 'Saving...') : (
                                 <>
