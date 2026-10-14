@@ -1,7 +1,5 @@
 'use client';
 
-import { cn } from '@/lib/utils';
-
 interface SavantPercentileChartProps {
     metrics: {
         label: string;
@@ -11,51 +9,63 @@ interface SavantPercentileChartProps {
     }[];
 }
 
+// Diverging pair (validated: blue <-> red, neutral gray midpoint) — percentile
+// is a polarity (poor vs great around a league-average center), which is
+// exactly what a diverging scale encodes. Discrete steps read more clearly
+// than a continuous interpolation at this marker size.
+function markerColor(percentile: number) {
+    if (percentile >= 90) return '#e34948'; // great — red, full strength
+    if (percentile >= 75) return '#ea7472';
+    if (percentile >= 60) return '#ef9d9b';
+    if (percentile >= 40) return '#9a9890'; // average — neutral gray
+    if (percentile >= 25) return '#6fa4e0';
+    return '#2a78d6'; // poor — blue, full strength
+}
+
 export function SavantPercentileChart({ metrics }: SavantPercentileChartProps) {
     return (
-        <div className="w-full bg-white rounded-lg shadow-sm border p-4">
-            <div className="flex justify-between items-center mb-4 border-b pb-2">
-                <h3 className="font-bold text-lg flex items-center gap-2">
-                    <span className="text-slate-900">Batting</span>
+        <div className="w-full bg-white rounded-xl shadow-sm border border-slate-200/80 p-4">
+            <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                <h3 className="font-semibold text-slate-900">
+                    Batting
                 </h3>
-                <div className="flex text-xs font-bold text-slate-400 gap-4 md:gap-12">
+                <div className="flex text-[11px] font-semibold tracking-wide text-slate-400 gap-4 md:gap-12">
                     <span>POOR</span>
                     <span>AVERAGE</span>
                     <span>GREAT</span>
                 </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3.5">
                 {metrics.map((metric) => (
                     <div key={metric.label} className="relative">
-                        <div className="flex items-center justify-between mb-1 text-sm">
-                            <span className="font-medium text-slate-700 w-24 text-right pr-4">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium text-slate-600 w-24 text-right pr-4">
                                 {metric.label}
                             </span>
 
                             {/* Bar Container */}
-                            <div className="flex-1 h-6 bg-slate-100 rounded-full relative overflow-hidden flex items-center">
-                                {/* Gradient Background */}
-                                <div className="absolute inset-0 opacity-20 bg-gradient-to-r from-blue-500 via-slate-200 to-red-500" />
-
-                                {/* The Circle Indicator */}
+                            <div className="flex-1 h-5 bg-slate-100 rounded-full relative overflow-hidden flex items-center">
+                                {/* Diverging background wash: blue -> gray -> red */}
                                 <div
-                                    className={cn(
-                                        "absolute h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2 border-white shadow-sm transition-all duration-500",
-                                        metric.percentile >= 90 ? "bg-red-600" :
-                                            metric.percentile >= 75 ? "bg-red-500" :
-                                                metric.percentile >= 60 ? "bg-red-400" :
-                                                    metric.percentile >= 40 ? "bg-slate-400" :
-                                                        metric.percentile >= 25 ? "bg-blue-400" :
-                                                            "bg-blue-600"
-                                    )}
-                                    style={{ left: `calc(${metric.percentile}% - 12px)` }}
+                                    className="absolute inset-0 opacity-[0.16]"
+                                    style={{ background: 'linear-gradient(to right, #2a78d6, #9a9890, #e34948)' }}
+                                />
+
+                                {/* The marker */}
+                                <div
+                                    className="absolute h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm transition-all duration-500"
+                                    style={{
+                                        left: `calc(${metric.percentile}% - 10px)`,
+                                        backgroundColor: markerColor(metric.percentile),
+                                        boxShadow: '0 0 0 2px #fff',
+                                    }}
                                 >
                                     {metric.percentile}
                                 </div>
                             </div>
 
-                            <span className="font-mono text-slate-500 w-16 text-right pl-2 text-xs">
+                            <span className="font-mono text-slate-500 w-16 text-right pl-2 text-xs tabular-nums">
                                 {metric.format ? metric.format(metric.value) : metric.value}
                             </span>
                         </div>
