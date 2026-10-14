@@ -162,18 +162,29 @@ function PlayerDetailsPanel({ player, stats, players, games }: { player: Player,
         },
     ];
 
+    const statLines: { label: string; value: string }[] = [
+        { label: 'PA', value: String(metrics.pa) },
+        { label: 'AB', value: String(metrics.ab) },
+        { label: 'Hits', value: String(metrics.h) },
+        { label: 'HR', value: String(metrics.hr) },
+        { label: 'RBI', value: String(filteredStats.reduce((sum, s) => sum + (s.rbi || 0), 0)) },
+        { label: 'BB', value: String(metrics.bb) },
+        { label: 'SO', value: String(metrics.so) },
+        { label: 'wOBA', value: metrics.woba.toFixed(3).replace('0.', '.') },
+    ];
+
     return (
-        <div className="p-4 bg-slate-50 rounded-lg mt-2 border border-slate-200">
+        <div className="p-5 bg-slate-50/70 rounded-xl mt-2 border border-slate-200/80">
             <div className="grid lg:grid-cols-[200px_500px_1fr] gap-8">
                 {/* Image Column */}
                 <div className="flex flex-col items-center justify-center">
-                    <div className="relative w-40 h-56 bg-black rounded-lg overflow-hidden flex items-center justify-center shadow-lg">
+                    <div className="relative w-40 h-56 bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center shadow-md">
                         {player.image_url ? (
                             <img src={player.image_url} alt={player.name} className="w-full h-full object-cover" />
                         ) : (
                             <div className="text-white text-center p-4">
                                 <p className="font-bold text-sm">目前沒有圖片</p>
-                                <p className="text-xs mt-1">可自行上傳</p>
+                                <p className="text-xs mt-1 text-slate-400">可自行上傳</p>
                             </div>
                         )}
                     </div>
@@ -182,7 +193,7 @@ function PlayerDetailsPanel({ player, stats, players, games }: { player: Player,
                 {/* Stats Column */}
                 <div>
                     <div className="flex justify-between items-center mb-4">
-                        <h4 className="font-bold text-slate-700">Detailed Statistics</h4>
+                        <h4 className="font-semibold text-slate-700 text-sm">Detailed statistics</h4>
                         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'career' | 'last5')}>
                             <TabsList className="h-8">
                                 <TabsTrigger value="career" className="text-xs">Career</TabsTrigger>
@@ -191,45 +202,19 @@ function PlayerDetailsPanel({ player, stats, players, games }: { player: Player,
                         </Tabs>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                        <div className="flex justify-between border-b border-slate-200 py-2">
-                            <span className="text-slate-500">PA:</span>
-                            <span className="font-mono font-bold text-slate-900">{metrics.pa}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-slate-200 py-2">
-                            <span className="text-slate-500">AB:</span>
-                            <span className="font-mono font-bold text-slate-900">{metrics.ab}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-slate-200 py-2">
-                            <span className="text-slate-500">Hits:</span>
-                            <span className="font-mono font-bold text-slate-900">{metrics.h}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-slate-200 py-2">
-                            <span className="text-slate-500">HR:</span>
-                            <span className="font-mono font-bold text-slate-900">{metrics.hr}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-slate-200 py-2">
-                            <span className="text-slate-500">RBI:</span>
-                            <span className="font-mono font-bold text-slate-900">{filteredStats.reduce((sum, s) => sum + (s.rbi || 0), 0)}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-slate-200 py-2">
-                            <span className="text-slate-500">BB:</span>
-                            <span className="font-mono font-bold text-slate-900">{metrics.bb}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-slate-200 py-2">
-                            <span className="text-slate-500">SO:</span>
-                            <span className="font-mono font-bold text-slate-900">{metrics.so}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-slate-200 py-2">
-                            <span className="text-slate-500">wOBA:</span>
-                            <span className="font-mono font-bold text-slate-900">{metrics.woba.toFixed(3).replace('0.', '.')}</span>
-                        </div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                        {statLines.map((line) => (
+                            <div key={line.label} className="flex justify-between border-b border-slate-200 py-2.5">
+                                <span className="text-slate-500">{line.label}</span>
+                                <span className="font-mono font-semibold text-slate-900 tabular-nums">{line.value}</span>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
                 {/* Chart Column */}
                 <div>
-                    <h4 className="font-bold text-slate-700 mb-2">Percentile Rankings (vs Team)</h4>
+                    <h4 className="font-semibold text-slate-700 text-sm mb-2">Percentile rankings <span className="text-slate-400 font-normal">(vs team)</span></h4>
                     <SavantPercentileChart metrics={chartMetrics} />
                 </div>
             </div>
@@ -450,25 +435,25 @@ export default function PlayersPage() {
         <div className="container mx-auto py-8 px-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Team Roster</h1>
-                    <p className="text-slate-500">Manage your players and jersey numbers</p>
+                    <h1 className="text-2xl font-bold text-slate-900">Team Roster</h1>
+                    <p className="text-slate-500 text-sm mt-1">Manage your players and jersey numbers</p>
                 </div>
                 <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-                    <Button onClick={initiateDelete} variant="destructive" className="bg-red-600 hover:bg-red-700 w-full md:w-auto">
+                    <Button onClick={initiateDelete} variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 w-full md:w-auto">
                         <Trash2 className="mr-2 h-4 w-4" /> Delete Data
                     </Button>
-                    <Button onClick={initiateImport} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 w-full md:w-auto">
+                    <Button onClick={initiateImport} variant="outline" className="border-slate-200 text-slate-600 hover:bg-slate-50 w-full md:w-auto">
                         Import Legacy Stats
                     </Button>
-                    <Button onClick={openAdd} className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto">
+                    <Button onClick={openAdd} className="w-full md:w-auto">
                         <Plus className="mr-2 h-4 w-4" /> Add Player
                     </Button>
                 </div>
             </div>
 
-            <Card>
+            <Card className="border-slate-200/80 shadow-sm">
                 <CardHeader>
-                    <CardTitle>Active Players ({players.length})</CardTitle>
+                    <CardTitle className="text-sm font-semibold text-slate-700">Active players <span className="text-slate-400 font-normal">({players.length})</span></CardTitle>
                 </CardHeader>
                 <CardContent>
                     {players.length === 0 ? (
@@ -504,31 +489,41 @@ export default function PlayersPage() {
                                                         {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                                     </Button>
                                                 </TableCell>
-                                                <TableCell className="font-mono font-bold text-lg text-slate-700">
+                                                <TableCell className="font-mono font-bold text-slate-400">
                                                     #{player.number}
                                                 </TableCell>
-                                                <TableCell className="font-medium text-lg">
-                                                    <span className="text-slate-900">
-                                                        {player.name}
-                                                    </span>
+                                                <TableCell className="font-medium">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center overflow-hidden flex-shrink-0">
+                                                            {player.image_url ? (
+                                                                <img src={player.image_url} alt={player.name} className="h-full w-full object-cover" />
+                                                            ) : (
+                                                                <span className="text-xs font-bold">{player.name.charAt(0)}</span>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-slate-900 text-base">
+                                                            {player.name}
+                                                        </span>
+                                                    </div>
                                                 </TableCell>
-                                                <TableCell className="text-right font-mono hidden md:table-cell">{metrics.avg.toFixed(3).replace('0.', '.')}</TableCell>
-                                                <TableCell className="text-right font-mono hidden md:table-cell">{metrics.obp.toFixed(3).replace('0.', '.')}</TableCell>
-                                                <TableCell className="text-right font-mono hidden md:table-cell">{metrics.slg.toFixed(3).replace('0.', '.')}</TableCell>
-                                                <TableCell className="text-right font-mono font-bold text-blue-700 hidden md:table-cell">{metrics.ops.toFixed(3)}</TableCell>
-                                                <TableCell className="text-right space-x-2">
+                                                <TableCell className="text-right font-mono hidden md:table-cell tabular-nums">{metrics.avg.toFixed(3).replace('0.', '.')}</TableCell>
+                                                <TableCell className="text-right font-mono hidden md:table-cell tabular-nums">{metrics.obp.toFixed(3).replace('0.', '.')}</TableCell>
+                                                <TableCell className="text-right font-mono hidden md:table-cell tabular-nums">{metrics.slg.toFixed(3).replace('0.', '.')}</TableCell>
+                                                <TableCell className="text-right font-mono font-bold text-primary hidden md:table-cell tabular-nums">{metrics.ops.toFixed(3)}</TableCell>
+                                                <TableCell className="text-right space-x-1">
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
                                                         onClick={() => openEdit(player)}
+                                                        className="text-slate-400 hover:text-primary"
                                                     >
-                                                        <Pencil className="h-4 w-4 text-slate-500" />
+                                                        <Pencil className="h-4 w-4" />
                                                     </Button>
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
                                                         onClick={() => { if (!requireAuth()) return; deletePlayer(player.id); }}
-                                                        className="hover:text-red-600"
+                                                        className="text-slate-400 hover:text-red-600"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>
@@ -599,11 +594,11 @@ export default function PlayersPage() {
                                 Player Photo
                             </label>
                             <div className="flex items-center gap-4">
-                                <div className="relative w-20 h-28 bg-black rounded overflow-hidden flex items-center justify-center border border-slate-200">
+                                <div className="relative w-20 h-28 bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center border border-slate-200">
                                     {formData.image_url ? (
                                         <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover" />
                                     ) : (
-                                        <span className="text-xs text-white text-center">No Image</span>
+                                        <span className="text-xs text-white/60 text-center">No Image</span>
                                     )}
                                 </div>
                                 <div className="space-y-2">
@@ -643,7 +638,7 @@ export default function PlayersPage() {
                         </div>
 
                         <DialogFooter>
-                            <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+                            <Button type="submit">
                                 {editingPlayer ? 'Save Changes' : 'Add Player'}
                             </Button>
                         </DialogFooter>
