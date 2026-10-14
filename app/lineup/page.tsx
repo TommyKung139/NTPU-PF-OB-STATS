@@ -110,31 +110,37 @@ export default function LineupPage() {
 
     return (
         <div className="container mx-auto py-8 px-4 max-w-4xl">
-            <h1 className="text-3xl font-bold text-slate-900 mb-8 flex items-center gap-2">
-                <Brain className="h-8 w-8 text-purple-600" /> AI Lineup Generator
-            </h1>
+            <div className="mb-8">
+                <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                    <span className="h-9 w-9 rounded-lg bg-[#6250d6]/10 text-[#6250d6] flex items-center justify-center">
+                        <Brain className="h-5 w-5" />
+                    </span>
+                    AI Lineup Generator
+                </h1>
+                <p className="text-slate-500 text-sm mt-1">Pick who&apos;s playing and let the model suggest a batting order</p>
+            </div>
 
-            <div className="grid gap-8 md:grid-cols-[1fr_1.5fr]">
+            <div className="grid gap-6 md:grid-cols-[1fr_1.5fr]">
                 {/* Player Selection */}
-                <Card className="h-fit">
+                <Card className="h-fit border-slate-200/80 shadow-sm">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Users className="h-5 w-5" /> Select Attending Players
+                        <CardTitle className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                            <Users className="h-4 w-4 text-[#6250d6]" /> Select attending players
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-2 mb-6 max-h-[60vh] overflow-y-auto">
+                        <div className="space-y-1 mb-6 max-h-[60vh] overflow-y-auto">
                             {players.map(player => (
                                 <div
                                     key={player.id}
-                                    className={`flex items-center space-x-3 p-2 rounded hover:bg-slate-50 cursor-pointer ${selectedPlayerIds.includes(player.id) ? 'bg-purple-50' : ''}`}
+                                    className={`flex items-center space-x-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors ${selectedPlayerIds.includes(player.id) ? 'bg-[#6250d6]/5' : ''}`}
                                     onClick={() => handlePlayerToggle(player.id)}
                                 >
                                     <Checkbox
                                         checked={selectedPlayerIds.includes(player.id)}
                                         onCheckedChange={() => handlePlayerToggle(player.id)}
                                     />
-                                    <span className="font-mono font-bold text-slate-600 w-8">#{player.number}</span>
+                                    <span className="font-mono font-bold text-slate-400 w-8">#{player.number}</span>
                                     <span className="font-medium">{player.name}</span>
                                 </div>
                             ))}
@@ -142,7 +148,7 @@ export default function LineupPage() {
                         <Button
                             onClick={generateLineup}
                             disabled={selectedPlayerIds.length < 9}
-                            className="w-full bg-purple-600 hover:bg-purple-700"
+                            className="w-full bg-[#6250d6] hover:bg-[#5340c0]"
                         >
                             <Sparkles className="mr-2 h-4 w-4" /> Generate Optimized Lineup
                         </Button>
@@ -153,29 +159,29 @@ export default function LineupPage() {
                 </Card>
 
                 {/* Results */}
-                <div className="space-y-4">
+                <div className="space-y-3">
                     {generatedLineup ? (
                         generatedLineup.map((slot, index) => (
-                            <Card key={slot.player.id} className="overflow-hidden border-l-4 border-l-purple-500">
+                            <Card key={slot.player.id} className="overflow-hidden border-slate-200/80 shadow-sm border-l-4 border-l-[#6250d6]">
                                 <div className="flex items-center p-4">
                                     <div className="flex-shrink-0 w-12 text-center">
                                         <div className="text-2xl font-bold text-slate-300">{index + 1}</div>
                                     </div>
                                     <div className="flex-grow">
                                         <div className="flex items-center gap-2">
-                                            <span className="font-bold text-lg text-slate-900">{slot.player.name}</span>
-                                            <span className="text-sm font-mono bg-slate-100 px-1.5 rounded">#{slot.player.number}</span>
+                                            <span className="font-bold text-slate-900">{slot.player.name}</span>
+                                            <span className="text-sm font-mono bg-slate-100 px-1.5 rounded text-slate-500">#{slot.player.number}</span>
                                         </div>
-                                        <div className="text-sm text-purple-600 font-medium">{slot.role}</div>
+                                        <div className="text-sm text-[#6250d6] font-medium">{slot.role}</div>
                                         <div className="text-xs text-slate-500">{slot.reason}</div>
                                     </div>
                                 </div>
                             </Card>
                         ))
                     ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed rounded-xl p-12">
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl p-12">
                             <Brain className="h-16 w-16 mb-4 opacity-20" />
-                            <p>Select players and click Generate to see the AI suggestion</p>
+                            <p className="text-sm text-center">Select players and click Generate to see the AI suggestion</p>
                         </div>
                     )}
                 </div>
